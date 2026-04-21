@@ -1,0 +1,15 @@
+export const ACCA_SUBJECTS = [
+  { id: 'F1', code: 'BT', name: 'Business and Technology', progress: 100 },
+  { id: 'F2', code: 'MA', name: 'Management Accounting', progress: 80 },
+  { id: 'F3', code: 'FA', name: 'Financial Accounting', progress: 45 },
+  { id: 'F4', code: 'LW', name: 'Corporate and Business Law', progress: 0 },
+  { id: 'F5', code: 'PM', name: 'Performance Management', progress: 0 },
+  { id: 'F6', code: 'TX', name: 'Taxation', progress: 0 },
+  { id: 'F7', code: 'FR', name: 'Financial Reporting', progress: 0 },
+  { id: 'F8', code: 'AA', name: 'Audit and Assurance', progress: 0 },
+  { id: 'F9', code: 'FM', name: 'Financial Management', progress: 0 },
+  { id: 'P1', code: 'SBL', name: 'Strategic Business Leader', progress: 0 },
+  { id: 'P2', code: 'SBR', name: 'Strategic Business Reporting', progress: 0 },
+  { id: 'P3', code: 'AFM', name: 'Advanced Financial Management', progress: 0 },
+  { id: 'P4', code: 'APM', name: 'Advanced Performance Management', progress: 0 },
+];
