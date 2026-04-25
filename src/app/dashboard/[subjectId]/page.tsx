@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2, ChevronRight, Calendar, Flag } from 'lucide-react';
+import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2, ChevronRight, Calendar, Flag, BookHeart } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
 const SUBJECT_NAMES: Record<string, string> = {
@@ -294,7 +294,27 @@ export default function SubjectDetailPage() {
                     Review Flagged
                   </button>
                 </div>
+
+
+
               </div>
+            </div>
+
+            {/* Personal Notebook Widget */}
+            <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <BookHeart className="w-5 h-5 text-[#EAB308]" />
+                <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Personal Notebook</h3>
+              </div>
+              <p className="text-sm text-text-secondary dark:text-text-darkSecondary mb-4">
+                Review your own mnemonics and saved tips.
+              </p>
+              <button 
+                onClick={() => router.push(`/dashboard/${subjectId}/personal-notes`)}
+                className="w-full py-2 bg-[#FEF9C3] hover:bg-[#FDE047] dark:bg-[#713F12] dark:hover:bg-[#854D0E] text-[#854D0E] dark:text-[#FEF9C3] rounded transition-colors text-sm font-bold"
+              >
+                Open Notebook
+              </button>
             </div>
 
           </div>
