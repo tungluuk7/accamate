@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2, ChevronRight, Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
@@ -29,9 +29,10 @@ export default function SubjectDetailPage() {
   const [chapters, setChapters] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // States cho tính năng Đếm ngược ngày thi
+  // States và Ref cho tính năng Đếm ngược ngày thi
   const [examDate, setExamDate] = useState<string>('');
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchSubjectData = async () => {
@@ -39,19 +40,18 @@ export default function SubjectDetailPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // --- LẤY NGÀY THI TỪ DATABASE ---
+        // --- SỬA LỖI 406 TẠI ĐÂY (Dùng maybeSingle thay vì single) ---
         const { data: settingsData } = await supabase
           .from('user_settings')
           .select('exam_date')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle(); 
         
         if (settingsData && settingsData.exam_date) {
           setExamDate(settingsData.exam_date);
           calculateDaysRemaining(settingsData.exam_date);
         }
 
-        // --- LẤY CÁC DỮ LIỆU CŨ (Chapters, Progress) ---
         const { data: chaptersData } = await supabase.from('chapters').select('*').eq('subject_id', subjectId).order('order_index', { ascending: true });
         if (chaptersData) setChapters(chaptersData);
 
@@ -80,17 +80,15 @@ export default function SubjectDetailPage() {
     fetchSubjectData();
   }, [subjectId]);
 
-  // Hàm tính toán số ngày còn lại
   const calculateDaysRemaining = (targetDate: string) => {
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Đưa về đầu ngày để tính cho chuẩn
+    today.setHours(0, 0, 0, 0); 
     const exam = new Date(targetDate);
     const diffTime = exam.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     setDaysRemaining(diffDays);
   };
 
-  // Hàm xử lý khi người dùng chọn ngày thi mới trên lịch
   const handleDateChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = e.target.value;
     setExamDate(newDate);
@@ -100,13 +98,23 @@ export default function SubjectDetailPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Lưu ngày thi lên Supabase
       await supabase.from('user_settings').upsert({
         user_id: user.id,
         exam_date: newDate
       });
     } catch (error) {
       console.error("Lỗi lưu ngày thi:", error);
+    }
+  };
+
+  // Hàm mở bộ chọn lịch một cách chuẩn xác
+  const openDatePicker = () => {
+    if (dateInputRef.current) {
+      try {
+        dateInputRef.current.showPicker(); // API mới cho phép mở lịch trực tiếp
+      } catch (e) {
+        dateInputRef.current.click(); // Fallback cho trình duyệt cũ
+      }
     }
   };
 
@@ -129,9 +137,12 @@ export default function SubjectDetailPage() {
             </p>
           </div>
           
-          {/* KHU VỰC ĐẾM NGƯỢC CÓ TÍCH HỢP CHỌN NGÀY */}
+          {/* KHU VỰC ĐẾM NGƯỢC CÓ TÍCH HỢP CHỌN NGÀY (ĐÃ SỬA LỖI) */}
           <div className="relative group">
-            <div className="flex items-center gap-2 bg-surface dark:bg-background-dark px-4 py-2 rounded-full border border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary cursor-pointer hover:border-acca transition-colors">
+            <div 
+              onClick={openDatePicker}
+              className="flex items-center gap-2 bg-surface dark:bg-background-dark px-4 py-2 rounded-full border border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary cursor-pointer hover:border-acca transition-colors"
+            >
               {daysRemaining !== null && daysRemaining >= 0 ? (
                 <>
                   <Clock className="w-4 h-4 text-acca" />
@@ -150,13 +161,13 @@ export default function SubjectDetailPage() {
               )}
             </div>
             
-            {/* Input date tàng hình nằm đè lên để người dùng bấm vào là mở lịch */}
+            {/* Input date được giấu kín đi nhưng vẫn lưu giá trị */}
             <input 
+              ref={dateInputRef}
               type="date" 
               value={examDate}
               onChange={handleDateChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              title="Click to set your exam date"
+              className="absolute w-0 h-0 opacity-0 overflow-hidden" 
             />
           </div>
 
