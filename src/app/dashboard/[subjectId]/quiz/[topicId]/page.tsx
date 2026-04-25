@@ -26,10 +26,11 @@ export default function QuizPage() {
     const fetchQuestions = async () => {
       try {
         const { data, error } = await supabase
-          .from('questions')
-          .select('*')
-          .eq('subject_id', subjectId)
-          .order('id'); // Tải tất cả, không dùng .limit(1) nữa
+  .from('questions')
+  .select('*')
+  .eq('subject_id', subjectId)
+  .eq('chapter_id', params.topicId) // LỌC THÊM ĐIỀU KIỆN: Chỉ lấy câu hỏi có chapter_id khớp với URL
+  .order('id');
 
         if (error) throw error;
         if (data) setQuestions(data);
