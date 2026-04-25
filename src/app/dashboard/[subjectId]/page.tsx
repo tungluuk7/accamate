@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2 } from 'lucide-react';
+import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
-// Map tên môn học
 const SUBJECT_NAMES: Record<string, string> = {
   F1: 'Business and Technology',
   F2: 'Management Accounting',
@@ -27,6 +26,7 @@ export default function SubjectDetailPage() {
   const [activeTab, setActiveTab] = useState('notebook');
   const [progress, setProgress] = useState(0);
   const [mistakesCount, setMistakesCount] = useState(0);
+  const [chapters, setChapters] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -35,7 +35,16 @@ export default function SubjectDetailPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // 1. Lấy tổng số câu hỏi của riêng môn này
+        // 1. Lấy danh sách các chương học của môn này (Sắp xếp theo thứ tự)
+        const { data: chaptersData } = await supabase
+          .from('chapters')
+          .select('*')
+          .eq('subject_id', subjectId)
+          .order('order_index', { ascending: true });
+        
+        if (chaptersData) setChapters(chaptersData);
+
+        // 2. Lấy tổng số câu hỏi
         const { data: questions } = await supabase
           .from('questions')
           .select('id')
@@ -43,28 +52,24 @@ export default function SubjectDetailPage() {
         
         const totalQuestions = questions?.length || 0;
 
-        // 2. Lấy lịch sử làm bài của user cho môn này
+        // 3. Lấy lịch sử làm bài
         const { data: userProgress } = await supabase
           .from('user_progress')
           .select('question_id, is_correct, is_flagged')
           .eq('user_id', user.id);
 
         if (questions && userProgress) {
-          // Lọc ra tiến độ thuộc về môn học hiện tại
           const subjectQuestionIds = questions.map(q => q.id);
           const relevantProgress = userProgress.filter(p => subjectQuestionIds.includes(p.question_id));
 
-          // Đếm số câu đúng
           const correctCount = relevantProgress.filter(p => p.is_correct === true).length;
           
-          // Tính % tiến độ
           if (totalQuestions > 0) {
             setProgress(Math.round((correctCount / totalQuestions) * 100));
           } else {
             setProgress(0);
           }
 
-          // Đếm số câu sai hoặc được flag để cho vào mục Review Mistakes
           const mistakes = relevantProgress.filter(p => p.is_correct === false || p.is_flagged === true).length;
           setMistakesCount(mistakes);
         }
@@ -136,27 +141,66 @@ export default function SubjectDetailPage() {
 
             {/* Tab Content Area */}
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark min-h-[400px] shadow-sm">
+              
+              {/* NOTEBOOK TAB */}
               {activeTab === 'notebook' && (
-                <div>
+                <div className="space-y-4">
                   <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Chapter Notes</h3>
-                  <p className="text-text-secondary dark:text-text-darkSecondary text-sm">Your markdown notes will appear here in a tree view.</p>
+                  {chapters.length === 0 ? (
+                    <p className="text-text-secondary text-sm">No chapters found. Please add data in Supabase.</p>
+                  ) : (
+                    chapters.map((chapter) => (
+                      <div key={chapter.id} className="flex items-center justify-between p-4 bg-surface dark:bg-background-dark rounded border border-border dark:border-border-dark hover:border-acca transition-colors cursor-pointer">
+                        <div>
+                          <h4 className="font-medium text-text-primary dark:text-text-darkPrimary">{chapter.title}</h4>
+                          <p className="text-xs text-text-secondary mt-1">Review theory and summaries</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-text-secondary" />
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
+
+              {/* PRACTICE TAB */}
               {activeTab === 'practice' && (
-                <div className="flex flex-col items-center justify-center h-full py-12">
-                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-2">Ready to test your knowledge?</h3>
-                  <button 
-                    onClick={() => router.push(`/dashboard/${subjectId}/quiz/chapter-1`)}
-                    className="mt-4 flex items-center gap-2 bg-acca hover:bg-acca-dark text-white px-6 py-3 rounded transition-colors font-medium"
-                  >
-                    <PlayCircle className="w-5 h-5" /> Start Practice
-                  </button>
+                <div className="space-y-4">
+                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Chapter Quizzes</h3>
+                  {chapters.length === 0 ? (
+                    <p className="text-text-secondary text-sm">No chapters found. Please add data in Supabase.</p>
+                  ) : (
+                    chapters.map((chapter) => (
+                      <div key={chapter.id} className="flex items-center justify-between p-4 bg-surface dark:bg-background-dark rounded border border-border dark:border-border-dark hover:border-acca transition-colors">
+                        <div>
+                          <h4 className="font-medium text-text-primary dark:text-text-darkPrimary">{chapter.title}</h4>
+                          <p className="text-xs text-text-secondary mt-1">Test your knowledge on this chapter</p>
+                        </div>
+                        {/* Truyền chính xác ID của chương học vào URL thay vì 'chapter-1' */}
+                        <button 
+                          onClick={() => router.push(`/dashboard/${subjectId}/quiz/${chapter.id}`)}
+                          className="flex items-center gap-2 bg-acca hover:bg-acca-dark text-white px-4 py-2 rounded transition-colors text-sm font-medium"
+                        >
+                          <PlayCircle className="w-4 h-4" /> Start Quiz
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
+              
+              {/* RESOURCES TAB */}
+              {activeTab === 'resources' && (
+                <div className="flex flex-col items-center justify-center h-full py-12">
+                  <FileText className="w-12 h-12 text-text-secondary mb-4 opacity-50" />
+                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-2">Additional Resources</h3>
+                  <p className="text-sm text-text-secondary">Past papers, mock exams, and PDFs will be available here.</p>
+                </div>
+              )}
+
             </div>
           </div>
 
-          {/* Right Column - Widgets */}
+          {/* Right Column - Widgets (Giữ nguyên như cũ) */}
           <div className="space-y-6">
             
             {/* Formula Book Widget */}
@@ -165,15 +209,12 @@ export default function SubjectDetailPage() {
                 <Calculator className="w-5 h-5 text-acca" />
                 <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Formula Book</h3>
               </div>
-              <p className="text-sm text-text-secondary dark:text-text-darkSecondary mb-4">
-                Quick access to essential formulas.
-              </p>
               <button className="w-full py-2 border border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca transition-colors text-sm font-medium">
                 View All Formulas
               </button>
             </div>
 
-            {/* Progress Widget (Dynamic) */}
+            {/* Progress Widget */}
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-5 h-5 rounded-full border-2 border-acca border-t-transparent animate-spin"></div>
@@ -199,7 +240,7 @@ export default function SubjectDetailPage() {
               </div>
             </div>
 
-            {/* Review Mistakes Widget (Dynamic) */}
+            {/* Review Mistakes Widget */}
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <AlertCircle className="w-5 h-5 text-acca" />
