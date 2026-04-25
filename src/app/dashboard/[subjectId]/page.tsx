@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2, ChevronRight, Calendar } from 'lucide-react';
+import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2, ChevronRight, Calendar, Flag } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
 const SUBJECT_NAMES: Record<string, string> = {
@@ -23,15 +23,17 @@ export default function SubjectDetailPage() {
   const subjectId = params.subjectId as string;
   const subjectName = SUBJECT_NAMES[subjectId] || 'Unknown Subject';
 
-  // --- TẤT CẢ CÁC STATE PHẢI NẰM TRONG NÀY ---
   const [activeTab, setActiveTab] = useState('notebook');
   const [progress, setProgress] = useState(0);
+  
+  // 1. THÊM STATE CHO CÂU CẮM CỜ
   const [mistakesCount, setMistakesCount] = useState(0);
+  const [flaggedCount, setFlaggedCount] = useState(0); 
+  
   const [chapters, setChapters] = useState<any[]>([]);
-  const [resourcesList, setResourcesList] = useState<any[]>([]); // Đã chuyển vào đúng vị trí
+  const [resourcesList, setResourcesList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // States và Ref cho tính năng Đếm ngược ngày thi
   const [examDate, setExamDate] = useState<string>('');
   const [daysRemaining, setDaysRemaining] = useState<number | null>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -42,12 +44,7 @@ export default function SubjectDetailPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data: settingsData } = await supabase
-          .from('user_settings')
-          .select('exam_date')
-          .eq('user_id', user.id)
-          .maybeSingle(); 
-        
+        const { data: settingsData } = await supabase.from('user_settings').select('exam_date').eq('user_id', user.id).maybeSingle(); 
         if (settingsData && settingsData.exam_date) {
           setExamDate(settingsData.exam_date);
           calculateDaysRemaining(settingsData.exam_date);
@@ -56,13 +53,7 @@ export default function SubjectDetailPage() {
         const { data: chaptersData } = await supabase.from('chapters').select('*').eq('subject_id', subjectId).order('order_index', { ascending: true });
         if (chaptersData) setChapters(chaptersData);
 
-        // LẤY DANH SÁCH TÀI LIỆU
-        const { data: resourcesData } = await supabase
-          .from('resources')
-          .select('*')
-          .eq('subject_id', subjectId)
-          .order('created_at', { ascending: false });
-        
+        const { data: resourcesData } = await supabase.from('resources').select('*').eq('subject_id', subjectId).order('created_at', { ascending: false });
         if (resourcesData) setResourcesList(resourcesData);
 
         const { data: questions } = await supabase.from('questions').select('id').eq('subject_id', subjectId);
@@ -77,8 +68,12 @@ export default function SubjectDetailPage() {
           const correctCount = relevantProgress.filter(p => p.is_correct === true).length;
           setProgress(totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0);
 
-          const mistakes = relevantProgress.filter(p => p.is_correct === false || p.is_flagged === true).length;
+          // 2. TÁCH RIÊNG LOGIC ĐẾM CÂU SAI VÀ CÂU CẮM CỜ
+          const mistakes = relevantProgress.filter(p => p.is_correct === false).length;
           setMistakesCount(mistakes);
+
+          const flags = relevantProgress.filter(p => p.is_flagged === true).length;
+          setFlaggedCount(flags);
         }
       } catch (error) {
         console.error("Lỗi khi tải dữ liệu:", error);
@@ -103,15 +98,10 @@ export default function SubjectDetailPage() {
     const newDate = e.target.value;
     setExamDate(newDate);
     calculateDaysRemaining(newDate);
-
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
-      await supabase.from('user_settings').upsert({
-        user_id: user.id,
-        exam_date: newDate
-      });
+      await supabase.from('user_settings').upsert({ user_id: user.id, exam_date: newDate });
     } catch (error) {
       console.error("Lỗi lưu ngày thi:", error);
     }
@@ -119,11 +109,8 @@ export default function SubjectDetailPage() {
 
   const openDatePicker = () => {
     if (dateInputRef.current) {
-      try {
-        dateInputRef.current.showPicker(); 
-      } catch (e) {
-        dateInputRef.current.click(); 
-      }
+      try { dateInputRef.current.showPicker(); } 
+      catch (e) { dateInputRef.current.click(); }
     }
   };
 
@@ -138,46 +125,21 @@ export default function SubjectDetailPage() {
         {/* Header Section */}
         <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark flex justify-between items-center shadow-sm relative">
           <div>
-            <h1 className="text-3xl font-bold text-acca flex items-center gap-3">
-              {subjectId} - {subjectName}
-            </h1>
-            <p className="text-text-secondary dark:text-text-darkSecondary mt-2">
-              Keep up the good work!
-            </p>
+            <h1 className="text-3xl font-bold text-acca flex items-center gap-3">{subjectId} - {subjectName}</h1>
+            <p className="text-text-secondary dark:text-text-darkSecondary mt-2">Keep up the good work!</p>
           </div>
-          
           <div className="relative group">
-            <div 
-              onClick={openDatePicker}
-              className="flex items-center gap-2 bg-surface dark:bg-background-dark px-4 py-2 rounded-full border border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary cursor-pointer hover:border-acca transition-colors"
-            >
+            <div onClick={openDatePicker} className="flex items-center gap-2 bg-surface dark:bg-background-dark px-4 py-2 rounded-full border border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary cursor-pointer hover:border-acca transition-colors">
               {daysRemaining !== null && daysRemaining >= 0 ? (
-                <>
-                  <Clock className="w-4 h-4 text-acca" />
-                  <span className="text-sm font-medium">{daysRemaining} days until exam</span>
-                </>
+                <><Clock className="w-4 h-4 text-acca" /><span className="text-sm font-medium">{daysRemaining} days until exam</span></>
               ) : daysRemaining !== null && daysRemaining < 0 ? (
-                <>
-                  <AlertCircle className="w-4 h-4 text-acca" />
-                  <span className="text-sm font-medium">Exam date passed!</span>
-                </>
+                <><AlertCircle className="w-4 h-4 text-acca" /><span className="text-sm font-medium">Exam date passed!</span></>
               ) : (
-                <>
-                  <Calendar className="w-4 h-4 text-acca" />
-                  <span className="text-sm font-medium">Set exam date</span>
-                </>
+                <><Calendar className="w-4 h-4 text-acca" /><span className="text-sm font-medium">Set exam date</span></>
               )}
             </div>
-            
-            <input 
-              ref={dateInputRef}
-              type="date" 
-              value={examDate}
-              onChange={handleDateChange}
-              className="absolute w-0 h-0 opacity-0 overflow-hidden" 
-            />
+            <input ref={dateInputRef} type="date" value={examDate} onChange={handleDateChange} className="absolute w-0 h-0 opacity-0 overflow-hidden" />
           </div>
-
         </div>
 
         {/* Main Content Grid */}
@@ -185,7 +147,6 @@ export default function SubjectDetailPage() {
           
           {/* Left Column - Tabs & Content */}
           <div className="lg:col-span-2 space-y-6">
-            
             <div className="flex bg-background dark:bg-surface-dark rounded-md border border-border dark:border-border-dark p-1 shadow-sm">
               <button onClick={() => setActiveTab('notebook')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded text-sm font-medium transition-colors ${activeTab === 'notebook' ? 'bg-acca-light text-acca dark:bg-[#7F1D1D] dark:text-[#FCA5A5]' : 'text-text-secondary hover:text-text-primary dark:hover:text-text-darkPrimary'}`}><BookOpen className="w-4 h-4" /> Notebook</button>
               <button onClick={() => setActiveTab('resources')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded text-sm font-medium transition-colors ${activeTab === 'resources' ? 'bg-acca-light text-acca dark:bg-[#7F1D1D] dark:text-[#FCA5A5]' : 'text-text-secondary hover:text-text-primary dark:hover:text-text-darkPrimary'}`}><FileText className="w-4 h-4" /> Resources</button>
@@ -193,7 +154,6 @@ export default function SubjectDetailPage() {
             </div>
 
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark min-h-[400px] shadow-sm">
-              
               {activeTab === 'notebook' && (
                 <div className="space-y-4">
                   <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Chapter Notes</h3>
@@ -233,52 +193,33 @@ export default function SubjectDetailPage() {
               {activeTab === 'resources' && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
                   <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Study Resources</h3>
-                  
                   {resourcesList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full py-12">
                       <FileText className="w-12 h-12 text-text-secondary mb-4 opacity-50" />
-                      <p className="text-sm text-text-secondary">No resources found. Please add materials in Supabase.</p>
+                      <p className="text-sm text-text-secondary">No resources found.</p>
                     </div>
                   ) : (
                     <div className="grid gap-4">
                       {resourcesList.map((res) => (
                         <div key={res.id} className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-surface dark:bg-background-dark rounded-md border border-border dark:border-border-dark hover:border-acca transition-colors group shadow-sm">
-                          
                           <div className="flex items-start gap-4">
                             <div className="p-3 bg-background dark:bg-surface-dark rounded border border-border dark:border-border-dark shrink-0">
-                              {res.resource_type === 'VIDEO' ? (
-                                <PlayCircle className="w-6 h-6 text-[#3B82F6]" /> 
-                              ) : (
-                                <FileText className="w-6 h-6 text-acca" /> 
-                              )}
+                              {res.resource_type === 'VIDEO' ? <PlayCircle className="w-6 h-6 text-[#3B82F6]" /> : <FileText className="w-6 h-6 text-acca" />}
                             </div>
-                            
                             <div>
-                              <h4 className="font-bold text-text-primary dark:text-text-darkPrimary group-hover:text-acca transition-colors">
-                                {res.title}
-                              </h4>
-                              <p className="text-sm text-text-secondary mt-1 leading-relaxed">
-                                {res.description}
-                              </p>
+                              <h4 className="font-bold text-text-primary dark:text-text-darkPrimary group-hover:text-acca transition-colors">{res.title}</h4>
+                              <p className="text-sm text-text-secondary mt-1 leading-relaxed">{res.description}</p>
                             </div>
                           </div>
-
-                          <a 
-                            href={res.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="mt-4 md:mt-0 shrink-0 px-6 py-2 border-2 border-border dark:border-border-dark rounded font-medium text-text-primary dark:text-text-darkPrimary hover:border-acca hover:text-acca transition-colors text-center"
-                          >
+                          <a href={res.url} target="_blank" rel="noopener noreferrer" className="mt-4 md:mt-0 shrink-0 px-6 py-2 border-2 border-border dark:border-border-dark rounded font-medium text-text-primary dark:text-text-darkPrimary hover:border-acca hover:text-acca transition-colors text-center">
                             {res.resource_type === 'VIDEO' ? 'Watch Video' : 'View / Download'}
                           </a>
-
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
               )}
-
             </div>
           </div>
 
@@ -290,10 +231,7 @@ export default function SubjectDetailPage() {
                 <Calculator className="w-5 h-5 text-acca" />
                 <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Formula Book</h3>
               </div>
-              <button 
-                onClick={() => router.push(`/dashboard/${subjectId}/formulas`)}
-                className="w-full py-2 border border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca transition-colors text-sm font-medium"
-              >
+              <button onClick={() => router.push(`/dashboard/${subjectId}/formulas`)} className="w-full py-2 border border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca transition-colors text-sm font-medium">
                 View All Formulas
               </button>
             </div>
@@ -314,18 +252,49 @@ export default function SubjectDetailPage() {
               </div>
             </div>
 
+            {/* 3. WIDGET "REVIEW CENTER" MỚI */}
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <AlertCircle className="w-5 h-5 text-acca" />
-                <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Review Mistakes</h3>
+              <div className="flex items-center gap-2 mb-5">
+                <AlertCircle className="w-5 h-5 text-text-primary dark:text-text-darkPrimary" />
+                <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Review Center</h3>
               </div>
-              <div className="bg-surface dark:bg-background-dark p-4 rounded mb-4 flex items-end gap-2 border border-border dark:border-border-dark">
-                <span className="text-3xl font-black text-acca leading-none">{mistakesCount}</span>
-                <span className="text-sm text-text-secondary dark:text-text-darkSecondary mb-1">questions to review</span>
+              
+              <div className="space-y-4">
+                {/* Khu vực Mistakes */}
+                <div className="p-4 rounded border border-border dark:border-border-dark bg-surface dark:bg-background-dark">
+                  <div className="flex justify-between items-end mb-3">
+                    <div>
+                      <span className="text-3xl font-black text-acca leading-none mr-2">{mistakesCount}</span>
+                      <span className="text-sm text-text-secondary dark:text-text-darkSecondary">mistakes</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => router.push(`/dashboard/${subjectId}/quiz/mistakes`)} 
+                    disabled={mistakesCount === 0} 
+                    className={`w-full py-2.5 rounded font-medium transition-colors ${mistakesCount > 0 ? 'bg-acca hover:bg-acca-dark text-white' : 'bg-background dark:bg-surface-dark text-text-secondary cursor-not-allowed border border-border dark:border-border-dark'}`}
+                  >
+                    Redo Mistakes
+                  </button>
+                </div>
+
+                {/* Khu vực Flagged */}
+                <div className="p-4 rounded border border-border dark:border-border-dark bg-surface dark:bg-background-dark">
+                  <div className="flex justify-between items-end mb-3">
+                    <div>
+                      <span className="text-3xl font-black text-[#EAB308] leading-none mr-2">{flaggedCount}</span>
+                      <span className="text-sm text-text-secondary dark:text-text-darkSecondary">flagged</span>
+                    </div>
+                    <Flag className="w-5 h-5 text-[#EAB308] opacity-50 mb-1" />
+                  </div>
+                  <button 
+                    onClick={() => router.push(`/dashboard/${subjectId}/quiz/flagged`)} 
+                    disabled={flaggedCount === 0} 
+                    className={`w-full py-2.5 rounded font-medium transition-colors ${flaggedCount > 0 ? 'bg-[#EAB308] hover:bg-[#CA8A04] text-white' : 'bg-background dark:bg-surface-dark text-text-secondary cursor-not-allowed border border-border dark:border-border-dark'}`}
+                  >
+                    Review Flagged
+                  </button>
+                </div>
               </div>
-              <button onClick={() => router.push(`/dashboard/${subjectId}/quiz/mistakes`)} disabled={mistakesCount === 0} className={`w-full py-2.5 rounded font-medium transition-colors ${mistakesCount > 0 ? 'bg-acca hover:bg-acca-dark text-white' : 'bg-surface dark:bg-background-dark text-text-secondary cursor-not-allowed'}`}>
-                Practice Mistakes
-              </button>
             </div>
 
           </div>

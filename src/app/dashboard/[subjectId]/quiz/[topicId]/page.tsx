@@ -27,41 +27,43 @@ export default function QuizPage() {
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
-  useEffect(() => {
+useEffect(() => {
     const fetchQuestions = async () => {
       try {
-        // 1. TRƯỜNG HỢP: ÔN TẬP CÂU SAI
-        if (topicId === 'mistakes') {
+        if (topicId === 'mistakes' || topicId === 'flagged') {
+          // --- LOGIC MỚI: Xử lý cả 2 trường hợp ôn tập ---
           const { data: { user } } = await supabase.auth.getUser();
           if (!user) return;
 
-          // Lấy ID các câu mà Trang đã làm sai (is_correct = false) hoặc đã cắm cờ (is_flagged = true)
-          const { data: progressData } = await supabase
-            .from('user_progress')
-            .select('question_id')
-            .eq('user_id', user.id)
-            .or('is_correct.eq.false,is_flagged.eq.true');
+          // Tạo câu truy vấn dựa trên người dùng bấm nút nào
+          let query = supabase.from('user_progress').select('question_id').eq('user_id', user.id);
+          
+          if (topicId === 'mistakes') {
+            query = query.eq('is_correct', false); // Chỉ lấy câu sai
+          } else if (topicId === 'flagged') {
+            query = query.eq('is_flagged', true); // Chỉ lấy câu cắm cờ
+          }
 
-          const mistakeIds = progressData?.map(p => p.question_id) || [];
+          const { data: progressData } = await query;
+          const targetIds = progressData?.map(p => p.question_id) || [];
 
-          if (mistakeIds.length === 0) {
+          if (targetIds.length === 0) {
             setQuestions([]);
             return;
           }
 
-          // Kéo nội dung các câu hỏi đó về
           const { data, error } = await supabase
             .from('questions')
             .select('*')
             .eq('subject_id', subjectId)
-            .in('id', mistakeIds) // Lọc những câu nằm trong danh sách làm sai
+            .in('id', targetIds)
             .order('id'); 
 
           if (error) throw error;
           if (data) setQuestions(data);
 
         } else {
-          // 2. TRƯỜNG HỢP BÌNH THƯỜNG: LÀM QUIZ THEO CHƯƠNG
+          // --- LOGIC CŨ: Làm Quiz theo Chapter bình thường ---
           const { data, error } = await supabase
             .from('questions')
             .select('*')
