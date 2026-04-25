@@ -28,38 +28,52 @@ export default function QuizPage() {
   const [noteText, setNoteText] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
 
+  // Thêm dòng này để lấy tham số từ URL
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const mode = searchParams?.get('mode');
+
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        let query = supabase.from('questions').select('*').eq('subject_id', subjectId);
-        
-        if (topicId === 'mistakes' || topicId === 'flagged') {
-          let progressQuery = supabase.from('user_progress').select('question_id').eq('user_id', user.id);
-          if (topicId === 'mistakes') progressQuery = progressQuery.eq('is_correct', false);
-          else if (topicId === 'flagged') progressQuery = progressQuery.eq('is_flagged', true);
+        // 1. Lấy TẤT CẢ câu hỏi của chương này
+        let { data: allQuestions, error } = await supabase
+          .from('questions')
+          .select('*')
+          .eq('subject_id', subjectId)
+          .eq('chapter_id', topicId)
+          .order('id');
 
-          const { data: progressData } = await progressQuery;
-          const targetIds = progressData?.map(p => p.question_id) || [];
-          if (targetIds.length === 0) { setQuestions([]); setIsLoading(false); return; }
-          query = query.in('id', targetIds);
-        } else {
-          query = query.eq('chapter_id', topicId);
+        if (error) throw error;
+        if (!allQuestions) return;
+
+        // 2. Nếu ở chế độ "Continue", thực hiện lọc bỏ những câu đã làm ĐÚNG
+        if (mode === 'continue') {
+          const { data: progress } = await supabase
+            .from('user_progress')
+            .select('question_id, is_correct')
+            .eq('user_id', user.id);
+
+          const correctIds = progress
+            ?.filter(p => p.is_correct === true)
+            .map(p => p.question_id) || [];
+
+          // Chỉ giữ lại những câu CHƯA LÀM hoặc làm SAI
+          allQuestions = allQuestions.filter(q => !correctIds.includes(q.id));
         }
 
-        const { data: questionsData, error } = await query.order('id');
-        if (error) throw error;
-        setQuestions(questionsData || []);
+        setQuestions(allQuestions);
       } catch (error) {
-        console.error("Lỗi tải câu hỏi:", error);
+        console.error("Lỗi tải dữ liệu quiz:", error);
       } finally {
         setIsLoading(false);
       }
     };
+    
     fetchQuestions();
-  }, [subjectId, topicId]);
+  }, [subjectId, topicId, mode]);
 
   // --- LOGIC MỚI: Tải ghi chú và trạng thái khi đổi câu hỏi ---
   useEffect(() => {

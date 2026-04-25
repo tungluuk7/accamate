@@ -25,13 +25,15 @@ export default function SubjectDetailPage() {
 
   const [activeTab, setActiveTab] = useState('notebook');
   const [progress, setProgress] = useState(0);
-  
-  // 1. THÊM STATE CHO CÂU CẮM CỜ
   const [mistakesCount, setMistakesCount] = useState(0);
   const [flaggedCount, setFlaggedCount] = useState(0); 
-  
   const [chapters, setChapters] = useState<any[]>([]);
   const [resourcesList, setResourcesList] = useState<any[]>([]);
+  
+  // --- HAI STATE MỚI THÊM VÀO ---
+  const [allQuestions, setAllQuestions] = useState<any[]>([]);
+  const [userProgressList, setUserProgressList] = useState<any[]>([]);
+  
   const [isLoading, setIsLoading] = useState(true);
   
   const [examDate, setExamDate] = useState<string>('');
@@ -56,10 +58,14 @@ export default function SubjectDetailPage() {
         const { data: resourcesData } = await supabase.from('resources').select('*').eq('subject_id', subjectId).order('created_at', { ascending: false });
         if (resourcesData) setResourcesList(resourcesData);
 
-        const { data: questions } = await supabase.from('questions').select('id').eq('subject_id', subjectId);
+        // --- LƯU DỮ LIỆU CÂU HỎI VÀO STATE ---
+        const { data: questions } = await supabase.from('questions').select('id, chapter_id').eq('subject_id', subjectId);
+        if (questions) setAllQuestions(questions);
         const totalQuestions = questions?.length || 0;
 
+        // --- LƯU DỮ LIỆU TIẾN ĐỘ VÀO STATE ---
         const { data: userProgress } = await supabase.from('user_progress').select('question_id, is_correct, is_flagged').eq('user_id', user.id);
+        if (userProgress) setUserProgressList(userProgress);
 
         if (questions && userProgress) {
           const subjectQuestionIds = questions.map(q => q.id);
@@ -68,7 +74,6 @@ export default function SubjectDetailPage() {
           const correctCount = relevantProgress.filter(p => p.is_correct === true).length;
           setProgress(totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0);
 
-          // 2. TÁCH RIÊNG LOGIC ĐẾM CÂU SAI VÀ CÂU CẮM CỜ
           const mistakes = relevantProgress.filter(p => p.is_correct === false).length;
           setMistakesCount(mistakes);
 
@@ -175,17 +180,57 @@ export default function SubjectDetailPage() {
                 <div className="space-y-4">
                   <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Chapter Quizzes</h3>
                   {chapters.length === 0 ? <p className="text-text-secondary text-sm">No chapters found.</p> : (
-                    chapters.map((chapter) => (
-                      <div key={chapter.id} className="flex items-center justify-between p-4 bg-surface dark:bg-background-dark rounded border border-border dark:border-border-dark hover:border-acca transition-colors">
-                        <div>
-                          <h4 className="font-medium text-text-primary dark:text-text-darkPrimary">{chapter.title}</h4>
-                          <p className="text-xs text-text-secondary mt-1">Test your knowledge on this chapter</p>
+                    chapters.map((chapter) => {
+                      // --- LOGIC TÍNH TIẾN ĐỘ ĐÃ SỬA CHUẨN XÁC ---
+                      const chapterQuestions = allQuestions.filter(q => q.chapter_id === chapter.id);
+                      const total = chapterQuestions.length;
+                      const correctInChapter = userProgressList.filter(p => 
+                        chapterQuestions.some(q => q.id === p.question_id) && p.is_correct === true
+                      ).length;
+                      
+                      const isCompleted = total > 0 && correctInChapter === total;
+
+                      return (
+                        <div key={chapter.id} className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-surface dark:bg-background-dark rounded border border-border dark:border-border-dark hover:border-acca transition-all shadow-sm">
+                          <div className="mb-4 md:mb-0">
+                            <h4 className="font-bold text-text-primary dark:text-text-darkPrimary">{chapter.title}</h4>
+                            <div className="flex items-center gap-3 mt-2">
+                              <div className="w-32 h-2 bg-background dark:bg-surface-dark rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-acca transition-all duration-500" 
+                                  style={{ width: `${total > 0 ? (correctInChapter / total) * 100 : 0}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-text-secondary font-medium">
+                                {correctInChapter}/{total} questions mastered
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => router.push(`/dashboard/${subjectId}/quiz/${chapter.id}`)}
+                              className="flex-1 md:flex-none px-4 py-2 border border-acca text-acca hover:bg-acca hover:text-white rounded transition-colors text-sm font-bold"
+                            >
+                              Restart
+                            </button>
+
+                            <button 
+                              onClick={() => router.push(`/dashboard/${subjectId}/quiz/${chapter.id}?mode=continue`)}
+                              disabled={isCompleted || total === 0}
+                              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded transition-all text-sm font-bold ${
+                                isCompleted || total === 0
+                                ? 'bg-surface dark:bg-background-dark text-text-secondary cursor-not-allowed border border-border'
+                                : 'bg-acca text-white hover:bg-acca-dark shadow-md'
+                              }`}
+                            >
+                              <PlayCircle className="w-4 h-4" />
+                              {correctInChapter > 0 ? 'Continue' : 'Start'}
+                            </button>
+                          </div>
                         </div>
-                        <button onClick={() => router.push(`/dashboard/${subjectId}/quiz/${chapter.id}`)} className="flex items-center gap-2 bg-acca hover:bg-acca-dark text-white px-4 py-2 rounded transition-colors text-sm font-medium">
-                          <PlayCircle className="w-4 h-4" /> Start Quiz
-                        </button>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -252,7 +297,6 @@ export default function SubjectDetailPage() {
               </div>
             </div>
 
-            {/* 3. WIDGET "REVIEW CENTER" MỚI */}
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
               <div className="flex items-center gap-2 mb-5">
                 <AlertCircle className="w-5 h-5 text-text-primary dark:text-text-darkPrimary" />
@@ -260,7 +304,6 @@ export default function SubjectDetailPage() {
               </div>
               
               <div className="space-y-4">
-                {/* Khu vực Mistakes */}
                 <div className="p-4 rounded border border-border dark:border-border-dark bg-surface dark:bg-background-dark">
                   <div className="flex justify-between items-end mb-3">
                     <div>
@@ -268,16 +311,11 @@ export default function SubjectDetailPage() {
                       <span className="text-sm text-text-secondary dark:text-text-darkSecondary">mistakes</span>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => router.push(`/dashboard/${subjectId}/quiz/mistakes`)} 
-                    disabled={mistakesCount === 0} 
-                    className={`w-full py-2.5 rounded font-medium transition-colors ${mistakesCount > 0 ? 'bg-acca hover:bg-acca-dark text-white' : 'bg-background dark:bg-surface-dark text-text-secondary cursor-not-allowed border border-border dark:border-border-dark'}`}
-                  >
+                  <button onClick={() => router.push(`/dashboard/${subjectId}/quiz/mistakes`)} disabled={mistakesCount === 0} className={`w-full py-2.5 rounded font-medium transition-colors ${mistakesCount > 0 ? 'bg-acca hover:bg-acca-dark text-white' : 'bg-background dark:bg-surface-dark text-text-secondary cursor-not-allowed border border-border dark:border-border-dark'}`}>
                     Redo Mistakes
                   </button>
                 </div>
 
-                {/* Khu vực Flagged */}
                 <div className="p-4 rounded border border-border dark:border-border-dark bg-surface dark:bg-background-dark">
                   <div className="flex justify-between items-end mb-3">
                     <div>
@@ -286,21 +324,13 @@ export default function SubjectDetailPage() {
                     </div>
                     <Flag className="w-5 h-5 text-[#EAB308] opacity-50 mb-1" />
                   </div>
-                  <button 
-                    onClick={() => router.push(`/dashboard/${subjectId}/quiz/flagged`)} 
-                    disabled={flaggedCount === 0} 
-                    className={`w-full py-2.5 rounded font-medium transition-colors ${flaggedCount > 0 ? 'bg-[#EAB308] hover:bg-[#CA8A04] text-white' : 'bg-background dark:bg-surface-dark text-text-secondary cursor-not-allowed border border-border dark:border-border-dark'}`}
-                  >
+                  <button onClick={() => router.push(`/dashboard/${subjectId}/quiz/flagged`)} disabled={flaggedCount === 0} className={`w-full py-2.5 rounded font-medium transition-colors ${flaggedCount > 0 ? 'bg-[#EAB308] hover:bg-[#CA8A04] text-white' : 'bg-background dark:bg-surface-dark text-text-secondary cursor-not-allowed border border-border dark:border-border-dark'}`}>
                     Review Flagged
                   </button>
                 </div>
-
-
-
               </div>
             </div>
 
-            {/* Personal Notebook Widget */}
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <BookHeart className="w-5 h-5 text-[#EAB308]" />
