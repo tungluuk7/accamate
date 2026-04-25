@@ -2,258 +2,216 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Flag, Pin, Loader2, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Flag, Pin, Loader2, ArrowRight, CheckCircle2, CheckSquare } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
 export default function QuizPage() {
   const router = useRouter();
   const params = useParams();
   const subjectId = params.subjectId as string;
+  const topicId = params.topicId as string;
 
-  // States lưu trữ MẢNG câu hỏi và vị trí hiện tại
   const [questions, setQuestions] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // States quản lý tương tác cho câu hỏi HIỆN TẠI
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  // States quản lý đáp án cho ĐA DẠNG câu hỏi
+  const [isAnswered, setIsAnswered] = useState(false);
+  const [isCorrect, setIsCorrect] = useState(false);
+  
+  const [selectedSingle, setSelectedSingle] = useState<string | null>(null);
+  const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
+  const [shortAnswerValue, setShortAnswerValue] = useState("");
+
   const [isFlagged, setIsFlagged] = useState(false);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
-  // Gọi TẤT CẢ câu hỏi của môn học này
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
         const { data, error } = await supabase
-  .from('questions')
-  .select('*')
-  .eq('subject_id', subjectId)
-  .eq('chapter_id', params.topicId) // LỌC THÊM ĐIỀU KIỆN: Chỉ lấy câu hỏi có chapter_id khớp với URL
-  .order('id');
+          .from('questions')
+          .select('*')
+          .eq('subject_id', subjectId)
+          .eq('chapter_id', topicId)
+          .order('id'); 
 
         if (error) throw error;
         if (data) setQuestions(data);
       } catch (error) {
-        console.error("Lỗi khi tải câu hỏi:", error);
+        console.error("Lỗi tải câu hỏi:", error);
       } finally {
         setIsLoading(false);
       }
     };
-
     fetchQuestions();
-  }, [subjectId]);
+  }, [subjectId, topicId]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-surface dark:bg-background-dark">
-        <Loader2 className="w-10 h-10 animate-spin text-acca" />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-acca" /></div>;
+  if (questions.length === 0) return <div className="min-h-screen flex items-center justify-center"><h2 className="text-xl">No questions found!</h2></div>;
 
-  if (questions.length === 0) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-surface dark:bg-background-dark">
-        <h2 className="text-2xl font-bold text-text-primary dark:text-text-darkPrimary mb-4">No questions found!</h2>
-        <button onClick={() => router.back()} className="text-acca hover:underline">Go back</button>
-      </div>
-    );
-  }
-
-  // Lấy dữ liệu của câu hỏi đang hiển thị
   const currentQuestionData = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
+  const qType = currentQuestionData.question_type || 'SINGLE';
 
-  const saveProgress = async (selectedKey: string) => {
+  const saveProgress = async (correctStatus: boolean) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const isCorrect = selectedKey === currentQuestionData.correct_option;
-
-      const { error } = await supabase
-        .from('user_progress')
-        .upsert({
-          user_id: user.id,
-          question_id: currentQuestionData.id,
-          is_correct: isCorrect,
-          last_attempted: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id,question_id'
-        });
-
-      if (error) throw error;
+      await supabase.from('user_progress').upsert({
+        user_id: user.id,
+        question_id: currentQuestionData.id,
+        is_correct: correctStatus,
+        last_attempted: new Date().toISOString(),
+      }, { onConflict: 'user_id,question_id' });
     } catch (error) {
-      console.error("Lỗi khi lưu progress:", error);
+      console.error("Lỗi lưu progress:", error);
     }
   };
 
-  const handleSelectOption = (optionKey: string) => {
-    if (selectedOption) return; 
-    setSelectedOption(optionKey);
-    saveProgress(optionKey);
+  // NÚT CHẤM ĐIỂM THỦ CÔNG (Dành cho Multiple và Short Answer)
+  const handleManualCheck = () => {
+    let correct = false;
+    if (qType === 'MULTIPLE') {
+      const correctArray = currentQuestionData.correct_option.split(',').sort();
+      const selectedArray = selectedMultiple.sort();
+      correct = JSON.stringify(correctArray) === JSON.stringify(selectedArray);
+    } else if (qType === 'SHORT_ANSWER') {
+      correct = shortAnswerValue.trim().toLowerCase() === currentQuestionData.correct_option.trim().toLowerCase();
+    }
+    
+    setIsCorrect(correct);
+    setIsAnswered(true);
+    saveProgress(correct);
   };
 
-  // Hàm xử lý khi bấm nút "Next"
+  // NÚT CHỌN ĐÁP ÁN (Dành cho Single, True/False, Multiple)
+  const handleSelectOption = (key: string) => {
+    if (isAnswered) return;
+
+    if (qType === 'SINGLE' || qType === 'TRUE_FALSE') {
+      setSelectedSingle(key);
+      const correct = key === currentQuestionData.correct_option;
+      setIsCorrect(correct);
+      setIsAnswered(true);
+      saveProgress(correct);
+    } else if (qType === 'MULTIPLE') {
+      setSelectedMultiple(prev => 
+        prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+      );
+    }
+  };
+
   const handleNextQuestion = () => {
     if (!isLastQuestion) {
-      // Chuyển sang câu tiếp theo và reset lại trạng thái giao diện
       setCurrentIndex(prev => prev + 1);
-      setSelectedOption(null);
+      // Reset toàn bộ state
+      setIsAnswered(false);
+      setSelectedSingle(null);
+      setSelectedMultiple([]);
+      setShortAnswerValue("");
       setIsFlagged(false);
       setIsNoteOpen(false);
-      setNoteText("");
     } else {
-      // Nếu là câu cuối, quay về trang chi tiết môn học
       router.push(`/dashboard/${subjectId}`);
     }
   };
 
-  const isAnswered = selectedOption !== null;
-  const isCorrect = selectedOption === currentQuestionData.correct_option;
+  // HÀM RENDER KHU VỰC TRẢ LỜI TÙY THEO LOẠI CÂU HỎI
+  const renderAnswerArea = () => {
+    if (qType === 'SHORT_ANSWER') {
+      return (
+        <div className="flex flex-col gap-4">
+          <input 
+            type="text" 
+            placeholder="Type your numeric answer here..."
+            value={shortAnswerValue}
+            onChange={(e) => setShortAnswerValue(e.target.value)}
+            disabled={isAnswered}
+            className={`w-full p-6 border-2 rounded-md bg-background dark:bg-surface-dark text-text-primary dark:text-text-darkPrimary text-xl focus:outline-none transition-colors ${isAnswered ? (isCorrect ? 'border-[#16A34A] bg-[#F0FDF4]' : 'border-acca bg-acca-light') : 'border-border focus:border-acca'}`}
+          />
+          {!isAnswered && (
+            <button onClick={handleManualCheck} disabled={shortAnswerValue.trim() === ""} className="w-full py-4 bg-acca hover:bg-acca-dark text-white font-bold rounded-md disabled:opacity-50">
+              Check Answer
+            </button>
+          )}
+        </div>
+      );
+    }
 
-  const options = {
-    A: currentQuestionData.option_a,
-    B: currentQuestionData.option_b,
-    C: currentQuestionData.option_c,
-    D: currentQuestionData.option_d,
+    const optionsToRender = qType === 'TRUE_FALSE' 
+      ? [['A', currentQuestionData.option_a || 'True'], ['B', currentQuestionData.option_b || 'False']]
+      : [['A', currentQuestionData.option_a], ['B', currentQuestionData.option_b], ['C', currentQuestionData.option_c], ['D', currentQuestionData.option_d]].filter(opt => opt[1] !== "");
+
+    return (
+      <div className="flex flex-col gap-3">
+        {optionsToRender.map(([key, value]) => {
+          let style = "bg-background dark:bg-surface-dark border-border text-text-primary hover:border-acca";
+          const isSelected = qType === 'MULTIPLE' ? selectedMultiple.includes(key) : selectedSingle === key;
+          const correctKeys = currentQuestionData.correct_option.split(',');
+
+          if (isAnswered) {
+            if (correctKeys.includes(key)) {
+              style = "bg-[#F0FDF4] border-[#16A34A] text-[#166534] dark:bg-[#14532D] dark:text-[#4ADE80]";
+            } else if (isSelected) {
+              style = "bg-acca-light border-acca text-acca dark:bg-[#7F1D1D] dark:text-[#FCA5A5]";
+            } else {
+              style = "bg-surface border-border opacity-50";
+            }
+          } else if (isSelected) {
+            style = "border-acca ring-1 ring-acca";
+          }
+
+          return (
+            <button key={key} onClick={() => handleSelectOption(key)} disabled={isAnswered} className={`w-full flex items-center p-4 rounded-md border-2 transition-all text-left ${style}`}>
+              <span className={`w-8 h-8 flex items-center justify-center rounded mr-4 shrink-0 font-bold ${qType === 'MULTIPLE' ? 'rounded-md border-2' : 'rounded-full border border-current'}`}>
+                {qType === 'MULTIPLE' ? (isSelected ? <CheckSquare className="w-5 h-5 text-acca" /> : key) : key}
+              </span>
+              <span className="text-lg">{value}</span>
+            </button>
+          );
+        })}
+
+        {qType === 'MULTIPLE' && !isAnswered && (
+          <button onClick={handleManualCheck} disabled={selectedMultiple.length === 0} className="w-full py-4 mt-2 bg-acca hover:bg-acca-dark text-white font-bold rounded-md disabled:opacity-50">
+            Check Answers
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-surface dark:bg-background-dark transition-colors duration-300">
-      
-      {/* Top Navigation Bar */}
-      <div className="bg-background dark:bg-surface-dark border-b border-border dark:border-border-dark px-6 py-4 flex items-center justify-between">
-        <button 
-          onClick={() => router.push(`/dashboard/${subjectId}`)}
-          className="flex items-center gap-2 text-text-secondary hover:text-acca transition-colors font-medium"
-        >
-          <ArrowLeft className="w-5 h-5" />
-          <span>Exit Quiz</span>
+      <div className="bg-background dark:bg-surface-dark border-b border-border px-6 py-4 flex items-center justify-between">
+        <button onClick={() => router.push(`/dashboard/${subjectId}`)} className="flex items-center gap-2 text-text-secondary hover:text-acca font-medium">
+          <ArrowLeft className="w-5 h-5" /> <span>Exit Quiz</span>
         </button>
-        <div className="font-bold text-text-primary dark:text-text-darkPrimary">
-          Question {currentIndex + 1} of {questions.length}
-        </div>
+        <div className="font-bold text-text-primary">Question {currentIndex + 1} of {questions.length}</div>
       </div>
 
-      {/* Main Quiz Area */}
       <div className="flex-1 flex justify-center py-8 px-4">
         <div className="w-full max-w-3xl flex flex-col gap-6">
-          
-          <div className="bg-background dark:bg-surface-dark p-8 rounded-md border border-border dark:border-border-dark shadow-sm">
-            <h2 className="text-xl leading-relaxed text-text-primary dark:text-text-darkPrimary font-medium">
-              {currentQuestionData.content}
-            </h2>
+          <div className="bg-background dark:bg-surface-dark p-8 rounded-md border border-border shadow-sm">
+            <div className="text-xs font-bold text-acca mb-3 uppercase tracking-wider">{qType.replace('_', ' ')}</div>
+            <h2 className="text-xl leading-relaxed font-medium">{currentQuestionData.content}</h2>
           </div>
 
-          <div className="flex flex-col gap-3">
-            {Object.entries(options).map(([key, value]) => {
-              let buttonStyle = "bg-background dark:bg-surface-dark border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary hover:border-acca";
-              
-              if (isAnswered) {
-                if (key === currentQuestionData.correct_option) {
-                  buttonStyle = "bg-[#F0FDF4] border-[#16A34A] text-[#166534] dark:bg-[#14532D] dark:text-[#4ADE80] dark:border-[#22C55E]";
-                } else if (key === selectedOption) {
-                  buttonStyle = "bg-acca-light border-acca text-acca dark:bg-[#7F1D1D] dark:text-[#FCA5A5] dark:border-[#DC2626]";
-                } else {
-                  buttonStyle = "bg-surface dark:bg-background-dark border-border dark:border-border-dark text-text-secondary opacity-50 cursor-not-allowed";
-                }
-              }
+          {renderAnswerArea()}
 
-              return (
-                <button
-                  key={key}
-                  onClick={() => handleSelectOption(key)}
-                  disabled={isAnswered}
-                  className={`w-full flex items-center p-4 rounded-md border-2 transition-all duration-200 text-left ${buttonStyle}`}
-                >
-                  <span className="w-8 h-8 flex items-center justify-center rounded border border-current font-bold mr-4 shrink-0">
-                    {key}
-                  </span>
-                  <span className="text-lg">{value as string}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Explanation & Next Button Box */}
           {isAnswered && (
             <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2">
-              <div className={`p-6 rounded-md border-l-4 ${
-                isCorrect 
-                  ? 'bg-[#F0FDF4] border-[#16A34A] dark:bg-[#14532D]' 
-                  : 'bg-acca-light border-acca dark:bg-[#7F1D1D]'
-              }`}>
-                <h3 className={`font-bold mb-2 ${isCorrect ? 'text-[#166534] dark:text-[#4ADE80]' : 'text-acca dark:text-[#FCA5A5]'}`}>
-                  {isCorrect ? 'Correct!' : 'Incorrect'}
-                </h3>
-                <p className="text-text-primary dark:text-text-darkPrimary leading-relaxed">
-                  {currentQuestionData.explanation}
-                </p>
+              <div className={`p-6 rounded-md border-l-4 ${isCorrect ? 'bg-[#F0FDF4] border-[#16A34A]' : 'bg-acca-light border-acca'}`}>
+                <h3 className={`font-bold mb-2 ${isCorrect ? 'text-[#166534]' : 'text-acca'}`}>{isCorrect ? 'Correct!' : 'Incorrect'}</h3>
+                <p className="leading-relaxed">{currentQuestionData.explanation}</p>
               </div>
-
-              {/* NEXT BUTTON */}
-              <button 
-                onClick={handleNextQuestion}
-                className="w-full flex items-center justify-center gap-2 bg-acca hover:bg-acca-dark text-white py-4 rounded-md font-bold text-lg transition-colors shadow-sm"
-              >
-                {isLastQuestion ? (
-                  <>
-                    <CheckCircle2 className="w-6 h-6" />
-                    Complete Quiz
-                  </>
-                ) : (
-                  <>
-                    Next Question
-                    <ArrowRight className="w-6 h-6" />
-                  </>
-                )}
+              <button onClick={handleNextQuestion} className="w-full flex items-center justify-center gap-2 bg-acca text-white py-4 rounded-md font-bold text-lg">
+                {isLastQuestion ? <><CheckCircle2 className="w-6 h-6" /> Complete Quiz</> : <>Next Question <ArrowRight className="w-6 h-6" /></>}
               </button>
             </div>
           )}
-
-          {/* Tools Box: Flag & Pin Note */}
-          <div className="flex flex-col gap-4 mt-2">
-            {/* ... (Phần Flag và Note giữ nguyên như cũ) ... */}
-            <div className="flex gap-4">
-              <button 
-                onClick={() => setIsFlagged(!isFlagged)}
-                className={`flex items-center gap-2 px-4 py-2 rounded transition-colors font-medium ${
-                  isFlagged 
-                    ? 'text-acca bg-acca-light' 
-                    : 'text-text-secondary hover:bg-surface dark:hover:bg-background-dark'
-                }`}
-              >
-                <Flag className={`w-5 h-5 ${isFlagged ? 'fill-current' : ''}`} />
-                <span>{isFlagged ? 'Flagged for Review' : 'Flag Question'}</span>
-              </button>
-
-              <button 
-                onClick={() => setIsNoteOpen(!isNoteOpen)}
-                className={`flex items-center gap-2 px-4 py-2 rounded transition-colors font-medium ${
-                  isNoteOpen || noteText.length > 0
-                    ? 'text-[#EAB308] bg-[#FEF9C3] dark:bg-[#713F12] dark:text-[#FDE047]' 
-                    : 'text-text-secondary hover:bg-surface dark:hover:bg-background-dark'
-                }`}
-              >
-                <Pin className={`w-5 h-5 ${isNoteOpen || noteText.length > 0 ? 'fill-current' : ''}`} />
-                <span>Personal Note</span>
-              </button>
-            </div>
-
-            {isNoteOpen && (
-              <div className="animate-in fade-in slide-in-from-top-2">
-                <textarea
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  placeholder="Type your personal note or mnemonic here..."
-                  className="w-full min-h-[120px] p-4 bg-background dark:bg-surface-dark border border-border dark:border-border-dark rounded-md shadow-sm focus:outline-none focus:border-acca focus:ring-1 focus:ring-acca text-text-primary dark:text-text-darkPrimary resize-y"
-                ></textarea>
-              </div>
-            )}
-          </div>
-
         </div>
       </div>
     </div>
