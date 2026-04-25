@@ -62,9 +62,43 @@ export default function QuizPage() {
     );
   }
 
+  // ==========================================
+  // HÀM MỚI: LƯU KẾT QUẢ LÊN SUPABASE
+  // ==========================================
+  const saveProgress = async (selectedKey: string) => {
+    try {
+      // 1. Lấy thông tin user đang đăng nhập
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const isCorrect = selectedKey === questionData.correct_option;
+
+      // 2. Đẩy dữ liệu vào bảng user_progress
+      const { error } = await supabase
+        .from('user_progress')
+        .upsert({
+          user_id: user.id,
+          question_id: questionData.id,
+          is_correct: isCorrect,
+          last_attempted: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,question_id' // Ghi đè nếu đã làm câu này rồi
+        });
+
+      if (error) throw error;
+      console.log("Đã lưu kết quả thành công!");
+    } catch (error) {
+      console.error("Lỗi khi lưu progress:", error);
+    }
+  };
+
+  // Cập nhật hàm handleSelectOption
   const handleSelectOption = (optionKey: string) => {
     if (selectedOption) return; 
     setSelectedOption(optionKey);
+    
+    // Gọi hàm lưu dữ liệu ngay khi người dùng click chọn đáp án
+    saveProgress(optionKey);
   };
 
   const isAnswered = selectedOption !== null;
