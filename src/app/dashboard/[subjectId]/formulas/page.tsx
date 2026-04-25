@@ -5,6 +5,10 @@ import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Calculator, Loader2, Search, Info } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
+// 1. Import CSS và Component của KaTeX
+import 'katex/dist/katex.min.css';
+import { BlockMath } from 'react-katex';
+
 export default function FormulaBookPage() {
   const router = useRouter();
   const params = useParams();
@@ -34,7 +38,6 @@ export default function FormulaBookPage() {
     fetchFormulas();
   }, [subjectId]);
 
-  // Lọc công thức theo ô tìm kiếm
   const filteredFormulas = formulas.filter(f => 
     f.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
     f.formula_content.toLowerCase().includes(searchTerm.toLowerCase())
@@ -77,9 +80,12 @@ export default function FormulaBookPage() {
             filteredFormulas.map((f) => (
               <div key={f.id} className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm hover:border-acca transition-all group">
                 <h3 className="text-lg font-bold text-acca mb-3">{f.title}</h3>
-                <div className="bg-surface dark:bg-background-dark p-4 rounded-md font-mono text-xl text-center border border-dashed border-border mb-4 overflow-x-auto">
-                  {f.formula_content}
+                
+                {/* 2. Sử dụng BlockMath thay cho thẻ div text thường */}
+                <div className="bg-surface dark:bg-background-dark p-4 rounded-md text-center border border-dashed border-border dark:border-border-dark mb-4 overflow-x-auto text-text-primary dark:text-text-darkPrimary">
+                  <BlockMath math={f.formula_content} />
                 </div>
+
                 {f.explanation && (
                   <div className="flex gap-2 text-sm text-text-secondary">
                     <Info className="w-4 h-4 shrink-0 mt-0.5" />
