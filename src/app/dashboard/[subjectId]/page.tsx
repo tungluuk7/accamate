@@ -242,9 +242,12 @@ export default function SubjectDetailPage() {
                 <Calculator className="w-5 h-5 text-acca" />
                 <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Formula Book</h3>
               </div>
-              <button className="w-full py-2 border border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca transition-colors text-sm font-medium">
-                View All Formulas
-              </button>
+              <button 
+  onClick={() => router.push(`/dashboard/${subjectId}/formulas`)} // THÊM DÒNG NÀY
+  className="w-full py-2 border border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca transition-colors text-sm font-medium"
+>
+  View All Formulas
+</button>
             </div>
 
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
