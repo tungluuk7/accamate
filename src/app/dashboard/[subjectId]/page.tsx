@@ -1,169 +1,226 @@
 "use client";
 
-import { useState } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { ACCA_SUBJECTS } from '@/lib/constants';
-import { 
-  BookOpen, 
-  FileText, 
-  PenTool, 
-  Calculator, 
-  AlertCircle, 
-  PieChart,
-  Clock
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase/client';
+
+// Map tên môn học
+const SUBJECT_NAMES: Record<string, string> = {
+  F1: 'Business and Technology',
+  F2: 'Management Accounting',
+  F3: 'Financial Accounting',
+  F4: 'Corporate and Business Law',
+  F5: 'Performance Management',
+  F6: 'Taxation',
+  F7: 'Financial Reporting',
+  F8: 'Audit and Assurance',
+  F9: 'Financial Management',
+};
 
 export default function SubjectDetailPage() {
-  // Lấy mã môn học từ URL
   const params = useParams();
+  const router = useRouter();
   const subjectId = params.subjectId as string;
-  
-  // Quản lý trạng thái Tab đang active
-  const [activeTab, setActiveTab] = useState('notebook');
+  const subjectName = SUBJECT_NAMES[subjectId] || 'Unknown Subject';
 
-  // Tìm thông tin môn học tương ứng
-  const subject = ACCA_SUBJECTS.find(s => s.id === subjectId) || { name: 'Unknown Subject', code: '' };
+  const [activeTab, setActiveTab] = useState('notebook');
+  const [progress, setProgress] = useState(0);
+  const [mistakesCount, setMistakesCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSubjectData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // 1. Lấy tổng số câu hỏi của riêng môn này
+        const { data: questions } = await supabase
+          .from('questions')
+          .select('id')
+          .eq('subject_id', subjectId);
+        
+        const totalQuestions = questions?.length || 0;
+
+        // 2. Lấy lịch sử làm bài của user cho môn này
+        const { data: userProgress } = await supabase
+          .from('user_progress')
+          .select('question_id, is_correct, is_flagged')
+          .eq('user_id', user.id);
+
+        if (questions && userProgress) {
+          // Lọc ra tiến độ thuộc về môn học hiện tại
+          const subjectQuestionIds = questions.map(q => q.id);
+          const relevantProgress = userProgress.filter(p => subjectQuestionIds.includes(p.question_id));
+
+          // Đếm số câu đúng
+          const correctCount = relevantProgress.filter(p => p.is_correct === true).length;
+          
+          // Tính % tiến độ
+          if (totalQuestions > 0) {
+            setProgress(Math.round((correctCount / totalQuestions) * 100));
+          } else {
+            setProgress(0);
+          }
+
+          // Đếm số câu sai hoặc được flag để cho vào mục Review Mistakes
+          const mistakes = relevantProgress.filter(p => p.is_correct === false || p.is_flagged === true).length;
+          setMistakesCount(mistakes);
+        }
+      } catch (error) {
+        console.error("Lỗi khi tải dữ liệu môn học:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSubjectData();
+  }, [subjectId]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface dark:bg-background-dark">
+        <Loader2 className="w-10 h-10 animate-spin text-acca" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-surface dark:bg-background-dark p-4 md:p-8 transition-colors duration-300">
-      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-8">
+    <div className="min-h-screen bg-surface dark:bg-background-dark p-8 transition-colors duration-300">
+      <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* =========================================
-            LEFT COLUMN: MAIN STUDY AREA (70%) 
-            ========================================= */}
-        <div className="w-full lg:w-[70%] flex flex-col gap-6">
-          
-          {/* 1. Header Area */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 bg-background dark:bg-surface-dark p-6 rounded-md shadow-sm border border-border dark:border-border-dark">
-            <div>
-              <h1 className="text-3xl font-bold text-acca mb-1">
-                {subjectId} - {subject.name}
-              </h1>
-              <p className="text-text-secondary dark:text-text-darkSecondary font-medium">
-                Keep up the good work!
-              </p>
-            </div>
-            
-            <div className="flex items-center gap-2 text-text-primary dark:text-text-darkPrimary bg-surface dark:bg-background-dark px-4 py-2 rounded-md border border-border dark:border-border-dark">
-              <Clock className="w-5 h-5 text-acca" />
-              <span className="font-semibold">45 days until exam</span>
-            </div>
-          </div>
-
-          {/* 2. Tabs Navigation */}
-          <div className="flex gap-2 bg-background dark:bg-surface-dark p-2 rounded-md shadow-sm border border-border dark:border-border-dark overflow-x-auto">
-            {[
-              { id: 'notebook', label: 'Notebook', icon: BookOpen },
-              { id: 'resources', label: 'Resources', icon: FileText },
-              { id: 'practice', label: 'Practice', icon: PenTool },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 min-w-[120px] flex items-center justify-center gap-2 py-3 rounded transition-colors font-medium ${
-                    isActive 
-                      ? 'bg-acca-light text-acca' 
-                      : 'text-text-secondary hover:bg-surface hover:text-text-primary dark:hover:bg-background-dark dark:hover:text-text-darkPrimary'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 3. Dynamic Tab Content */}
-          <div className="bg-background dark:bg-surface-dark p-6 rounded-md shadow-sm border border-border dark:border-border-dark min-h-[500px]">
-            {activeTab === 'notebook' && (
-              <div className="animate-in fade-in duration-300">
-                <h2 className="text-xl font-semibold mb-4 text-text-primary dark:text-text-darkPrimary">Chapter Notes</h2>
-                <p className="text-text-secondary">Your markdown notes will appear here in a tree view.</p>
-              </div>
-            )}
-            
-            {activeTab === 'resources' && (
-              <div className="animate-in fade-in duration-300">
-                <h2 className="text-xl font-semibold mb-4 text-text-primary dark:text-text-darkPrimary">Study Resources</h2>
-                <p className="text-text-secondary">PDF links and external reading materials will be listed here.</p>
-              </div>
-            )}
-            
-            {activeTab === 'practice' && (
-              <div className="animate-in fade-in duration-300">
-                <h2 className="text-xl font-semibold mb-4 text-text-primary dark:text-text-darkPrimary">Mock Quizzes</h2>
-                <p className="text-text-secondary mb-6">Select a topic to start practicing.</p>
-                
-                {/* Nút mồi để chuẩn bị cho phần Quiz */}
-                <Link href={`/dashboard/${subjectId}/quiz/chapter-1`}>
-                  <button className="bg-acca hover:bg-acca-dark text-white py-2.5 px-6 rounded font-medium transition-colors">
-                    Start Chapter 1 Quiz
-                  </button>
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* =========================================
-            RIGHT COLUMN: TOOLS SIDEBAR (30%) 
-            ========================================= */}
-        <div className="w-full lg:w-[30%] flex flex-col gap-6">
-          
-          {/* Formula Book Card */}
-          <div className="bg-background dark:bg-surface-dark p-6 rounded-md shadow-sm border border-border dark:border-border-dark">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-acca-light rounded text-acca">
-                <Calculator className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-text-primary dark:text-text-darkPrimary">Formula Book</h3>
-            </div>
-            <p className="text-sm text-text-secondary dark:text-text-darkSecondary mb-6">
-              Quick access to essential formulas.
+        {/* Header Section */}
+        <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark flex justify-between items-center shadow-sm">
+          <div>
+            <h1 className="text-3xl font-bold text-acca flex items-center gap-3">
+              {subjectId} - {subjectName}
+            </h1>
+            <p className="text-text-secondary dark:text-text-darkSecondary mt-2">
+              Keep up the good work!
             </p>
-            <button className="w-full py-2.5 border-2 border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca hover:text-acca transition-colors font-medium">
-              View All Formulas
-            </button>
           </div>
-
-          {/* Learning Progress Card */}
-          <div className="bg-background dark:bg-surface-dark p-6 rounded-md shadow-sm border border-border dark:border-border-dark">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-acca-light rounded text-acca">
-                <PieChart className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-text-primary dark:text-text-darkPrimary">Progress</h3>
-            </div>
-            {/* Vòng tròn Progress giả định */}
-            <div className="flex items-center justify-center h-32 border-8 border-surface dark:border-background-dark border-t-acca rounded-full aspect-square mx-auto mb-2">
-               <span className="text-3xl font-black text-acca">45%</span>
-            </div>
+          <div className="flex items-center gap-2 bg-surface dark:bg-background-dark px-4 py-2 rounded-full border border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary">
+            <Clock className="w-4 h-4 text-acca" />
+            <span className="text-sm font-medium">45 days until exam</span>
           </div>
-
-          {/* Review Mistakes Card */}
-          <div className="bg-background dark:bg-surface-dark p-6 rounded-md shadow-sm border border-border dark:border-border-dark">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-acca-light rounded text-acca">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-text-primary dark:text-text-darkPrimary">Review Mistakes</h3>
-            </div>
-            <div className="bg-surface dark:bg-background-dark p-4 rounded mb-6 flex items-baseline gap-2">
-              <span className="text-4xl font-black text-acca">12</span>
-              <span className="text-text-secondary dark:text-text-darkSecondary font-medium">flagged questions</span>
-            </div>
-            <button className="w-full py-2.5 bg-acca hover:bg-acca-dark text-white rounded transition-colors font-medium">
-              Practice Mistakes
-            </button>
-          </div>
-
         </div>
 
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Left Column - Tabs & Content */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            {/* Tabs Navigation */}
+            <div className="flex bg-background dark:bg-surface-dark rounded-md border border-border dark:border-border-dark p-1 shadow-sm">
+              <button 
+                onClick={() => setActiveTab('notebook')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded text-sm font-medium transition-colors ${activeTab === 'notebook' ? 'bg-acca-light text-acca dark:bg-[#7F1D1D] dark:text-[#FCA5A5]' : 'text-text-secondary hover:text-text-primary dark:hover:text-text-darkPrimary'}`}
+              >
+                <BookOpen className="w-4 h-4" /> Notebook
+              </button>
+              <button 
+                onClick={() => setActiveTab('resources')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded text-sm font-medium transition-colors ${activeTab === 'resources' ? 'bg-acca-light text-acca dark:bg-[#7F1D1D] dark:text-[#FCA5A5]' : 'text-text-secondary hover:text-text-primary dark:hover:text-text-darkPrimary'}`}
+              >
+                <FileText className="w-4 h-4" /> Resources
+              </button>
+              <button 
+                onClick={() => setActiveTab('practice')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded text-sm font-medium transition-colors ${activeTab === 'practice' ? 'bg-acca-light text-acca dark:bg-[#7F1D1D] dark:text-[#FCA5A5]' : 'text-text-secondary hover:text-text-primary dark:hover:text-text-darkPrimary'}`}
+              >
+                <Settings className="w-4 h-4" /> Practice
+              </button>
+            </div>
+
+            {/* Tab Content Area */}
+            <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark min-h-[400px] shadow-sm">
+              {activeTab === 'notebook' && (
+                <div>
+                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Chapter Notes</h3>
+                  <p className="text-text-secondary dark:text-text-darkSecondary text-sm">Your markdown notes will appear here in a tree view.</p>
+                </div>
+              )}
+              {activeTab === 'practice' && (
+                <div className="flex flex-col items-center justify-center h-full py-12">
+                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-2">Ready to test your knowledge?</h3>
+                  <button 
+                    onClick={() => router.push(`/dashboard/${subjectId}/quiz/chapter-1`)}
+                    className="mt-4 flex items-center gap-2 bg-acca hover:bg-acca-dark text-white px-6 py-3 rounded transition-colors font-medium"
+                  >
+                    <PlayCircle className="w-5 h-5" /> Start Practice
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column - Widgets */}
+          <div className="space-y-6">
+            
+            {/* Formula Book Widget */}
+            <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Calculator className="w-5 h-5 text-acca" />
+                <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Formula Book</h3>
+              </div>
+              <p className="text-sm text-text-secondary dark:text-text-darkSecondary mb-4">
+                Quick access to essential formulas.
+              </p>
+              <button className="w-full py-2 border border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca transition-colors text-sm font-medium">
+                View All Formulas
+              </button>
+            </div>
+
+            {/* Progress Widget (Dynamic) */}
+            <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-5 h-5 rounded-full border-2 border-acca border-t-transparent animate-spin"></div>
+                <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Progress</h3>
+              </div>
+              
+              <div className="relative w-32 h-32 mx-auto">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="8" fill="none" className="text-surface dark:text-background-dark" />
+                  <circle 
+                    cx="50" cy="50" r="40" 
+                    stroke="currentColor" 
+                    strokeWidth="8" 
+                    fill="none" 
+                    strokeDasharray="251.2" 
+                    strokeDashoffset={251.2 - (251.2 * progress) / 100}
+                    className="text-acca transition-all duration-1000 ease-out" 
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-2xl font-black text-acca">{progress}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Review Mistakes Widget (Dynamic) */}
+            <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <AlertCircle className="w-5 h-5 text-acca" />
+                <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Review Mistakes</h3>
+              </div>
+              
+              <div className="bg-surface dark:bg-background-dark p-4 rounded mb-4 flex items-end gap-2 border border-border dark:border-border-dark">
+                <span className="text-3xl font-black text-acca leading-none">{mistakesCount}</span>
+                <span className="text-sm text-text-secondary dark:text-text-darkSecondary mb-1">questions to review</span>
+              </div>
+
+              <button 
+                disabled={mistakesCount === 0}
+                className={`w-full py-2.5 rounded font-medium transition-colors ${mistakesCount > 0 ? 'bg-acca hover:bg-acca-dark text-white' : 'bg-surface dark:bg-background-dark text-text-secondary cursor-not-allowed'}`}
+              >
+                Practice Mistakes
+              </button>
+            </div>
+
+          </div>
+        </div>
       </div>
     </div>
   );
