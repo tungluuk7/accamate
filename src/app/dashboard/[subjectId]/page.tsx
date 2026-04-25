@@ -27,10 +27,12 @@ export default function SubjectDetailPage() {
   const [progress, setProgress] = useState(0);
   const [mistakesCount, setMistakesCount] = useState(0);
   const [flaggedCount, setFlaggedCount] = useState(0); 
-  const [chapters, setChapters] = useState<any[]>([]);
-  const [resourcesList, setResourcesList] = useState<any[]>([]);
   
-  // --- HAI STATE MỚI THÊM VÀO ---
+  // --- THAY ĐỔI: TÁCH STATE CHAPTER THÀNH 2 LOẠI ---
+  const [theoryChapters, setTheoryChapters] = useState<any[]>([]);
+  const [practiceChapters, setPracticeChapters] = useState<any[]>([]);
+  
+  const [resourcesList, setResourcesList] = useState<any[]>([]);
   const [allQuestions, setAllQuestions] = useState<any[]>([]);
   const [userProgressList, setUserProgressList] = useState<any[]>([]);
   
@@ -52,18 +54,20 @@ export default function SubjectDetailPage() {
           calculateDaysRemaining(settingsData.exam_date);
         }
 
+        // --- THAY ĐỔI: PHÂN LOẠI CHƯƠNG NGAY KHI TẢI DỮ LIỆU ---
         const { data: chaptersData } = await supabase.from('chapters').select('*').eq('subject_id', subjectId).order('order_index', { ascending: true });
-        if (chaptersData) setChapters(chaptersData);
+        if (chaptersData) {
+          setTheoryChapters(chaptersData.filter(c => c.type === 'THEORY' || !c.type));
+          setPracticeChapters(chaptersData.filter(c => c.type === 'PRACTICE'));
+        }
 
         const { data: resourcesData } = await supabase.from('resources').select('*').eq('subject_id', subjectId).order('created_at', { ascending: false });
         if (resourcesData) setResourcesList(resourcesData);
 
-        // --- LƯU DỮ LIỆU CÂU HỎI VÀO STATE ---
         const { data: questions } = await supabase.from('questions').select('id, chapter_id').eq('subject_id', subjectId);
         if (questions) setAllQuestions(questions);
         const totalQuestions = questions?.length || 0;
 
-        // --- LƯU DỮ LIỆU TIẾN ĐỘ VÀO STATE ---
         const { data: userProgress } = await supabase.from('user_progress').select('question_id, is_correct, is_flagged').eq('user_id', user.id);
         if (userProgress) setUserProgressList(userProgress);
 
@@ -159,11 +163,13 @@ export default function SubjectDetailPage() {
             </div>
 
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark min-h-[400px] shadow-sm">
+              
+              {/* --- THAY ĐỔI: TAB NOTEBOOK CHỈ HIỆN THEORY CHAPTERS --- */}
               {activeTab === 'notebook' && (
                 <div className="space-y-4">
-                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Chapter Notes</h3>
-                  {chapters.length === 0 ? <p className="text-text-secondary text-sm">No chapters found.</p> : (
-                    chapters.map((chapter) => (
+                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Theory Chapters</h3>
+                  {theoryChapters.length === 0 ? <p className="text-text-secondary text-sm">No theory chapters found.</p> : (
+                    theoryChapters.map((chapter) => (
                       <div key={chapter.id} onClick={() => router.push(`/dashboard/${subjectId}/notes/${chapter.id}`)} className="flex items-center justify-between p-4 bg-surface dark:bg-background-dark rounded border border-border dark:border-border-dark hover:border-acca transition-colors cursor-pointer group">
                         <div>
                           <h4 className="font-medium text-text-primary dark:text-text-darkPrimary group-hover:text-acca transition-colors">{chapter.title}</h4>
@@ -176,12 +182,12 @@ export default function SubjectDetailPage() {
                 </div>
               )}
 
+              {/* --- THAY ĐỔI: TAB PRACTICE CHỈ HIỆN PRACTICE CHAPTERS --- */}
               {activeTab === 'practice' && (
                 <div className="space-y-4">
-                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Chapter Quizzes</h3>
-                  {chapters.length === 0 ? <p className="text-text-secondary text-sm">No chapters found.</p> : (
-                    chapters.map((chapter) => {
-                      // --- LOGIC TÍNH TIẾN ĐỘ ĐÃ SỬA CHUẨN XÁC ---
+                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Practice Sections</h3>
+                  {practiceChapters.length === 0 ? <p className="text-text-secondary text-sm">No practice sections found.</p> : (
+                    practiceChapters.map((chapter) => {
                       const chapterQuestions = allQuestions.filter(q => q.chapter_id === chapter.id);
                       const total = chapterQuestions.length;
                       const correctInChapter = userProgressList.filter(p => 
