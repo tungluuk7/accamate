@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Flag, Pin, Loader2 } from 'lucide-react';
+import { ArrowLeft, Flag, Pin, Loader2, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
 export default function QuizPage() {
@@ -10,29 +10,29 @@ export default function QuizPage() {
   const params = useParams();
   const subjectId = params.subjectId as string;
 
-  // States lưu trữ dữ liệu từ Database
-  const [questionData, setQuestionData] = useState<any>(null);
+  // States lưu trữ MẢNG câu hỏi và vị trí hiện tại
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // States quản lý tương tác
+  // States quản lý tương tác cho câu hỏi HIỆN TẠI
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isFlagged, setIsFlagged] = useState(false);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
-  // Gọi dữ liệu từ Supabase khi vừa vào trang
+  // Gọi TẤT CẢ câu hỏi của môn học này
   useEffect(() => {
-    const fetchQuestion = async () => {
+    const fetchQuestions = async () => {
       try {
         const { data, error } = await supabase
           .from('questions')
           .select('*')
           .eq('subject_id', subjectId)
-          .limit(1)
-          .single(); // Lấy 1 câu hỏi đầu tiên của môn học này
+          .order('id'); // Tải tất cả, không dùng .limit(1) nữa
 
         if (error) throw error;
-        if (data) setQuestionData(data);
+        if (data) setQuestions(data);
       } catch (error) {
         console.error("Lỗi khi tải câu hỏi:", error);
       } finally {
@@ -40,10 +40,9 @@ export default function QuizPage() {
       }
     };
 
-    fetchQuestion();
+    fetchQuestions();
   }, [subjectId]);
 
-  // Nếu đang tải dữ liệu, hiển thị vòng xoay
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface dark:bg-background-dark">
@@ -52,8 +51,7 @@ export default function QuizPage() {
     );
   }
 
-  // Nếu không tìm thấy câu hỏi nào
-  if (!questionData) {
+  if (questions.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-surface dark:bg-background-dark">
         <h2 className="text-2xl font-bold text-text-primary dark:text-text-darkPrimary mb-4">No questions found!</h2>
@@ -62,54 +60,63 @@ export default function QuizPage() {
     );
   }
 
-  // ==========================================
-  // HÀM MỚI: LƯU KẾT QUẢ LÊN SUPABASE
-  // ==========================================
+  // Lấy dữ liệu của câu hỏi đang hiển thị
+  const currentQuestionData = questions[currentIndex];
+  const isLastQuestion = currentIndex === questions.length - 1;
+
   const saveProgress = async (selectedKey: string) => {
     try {
-      // 1. Lấy thông tin user đang đăng nhập
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const isCorrect = selectedKey === questionData.correct_option;
+      const isCorrect = selectedKey === currentQuestionData.correct_option;
 
-      // 2. Đẩy dữ liệu vào bảng user_progress
       const { error } = await supabase
         .from('user_progress')
         .upsert({
           user_id: user.id,
-          question_id: questionData.id,
+          question_id: currentQuestionData.id,
           is_correct: isCorrect,
           last_attempted: new Date().toISOString(),
         }, {
-          onConflict: 'user_id,question_id' // Ghi đè nếu đã làm câu này rồi
+          onConflict: 'user_id,question_id'
         });
 
       if (error) throw error;
-      console.log("Đã lưu kết quả thành công!");
     } catch (error) {
       console.error("Lỗi khi lưu progress:", error);
     }
   };
 
-  // Cập nhật hàm handleSelectOption
   const handleSelectOption = (optionKey: string) => {
     if (selectedOption) return; 
     setSelectedOption(optionKey);
-    
-    // Gọi hàm lưu dữ liệu ngay khi người dùng click chọn đáp án
     saveProgress(optionKey);
   };
 
-  const isAnswered = selectedOption !== null;
-  const isCorrect = selectedOption === questionData.correct_option;
+  // Hàm xử lý khi bấm nút "Next"
+  const handleNextQuestion = () => {
+    if (!isLastQuestion) {
+      // Chuyển sang câu tiếp theo và reset lại trạng thái giao diện
+      setCurrentIndex(prev => prev + 1);
+      setSelectedOption(null);
+      setIsFlagged(false);
+      setIsNoteOpen(false);
+      setNoteText("");
+    } else {
+      // Nếu là câu cuối, quay về trang chi tiết môn học
+      router.push(`/dashboard/${subjectId}`);
+    }
+  };
 
-  // Đóng gói 4 đáp án từ Database thành Object để dễ map ra giao diện
+  const isAnswered = selectedOption !== null;
+  const isCorrect = selectedOption === currentQuestionData.correct_option;
+
   const options = {
-    A: questionData.option_a,
-    B: questionData.option_b,
-    C: questionData.option_c,
-    D: questionData.option_d,
+    A: currentQuestionData.option_a,
+    B: currentQuestionData.option_b,
+    C: currentQuestionData.option_c,
+    D: currentQuestionData.option_d,
   };
 
   return (
@@ -122,10 +129,10 @@ export default function QuizPage() {
           className="flex items-center gap-2 text-text-secondary hover:text-acca transition-colors font-medium"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span>Back to {subjectId}</span>
+          <span>Exit Quiz</span>
         </button>
         <div className="font-bold text-text-primary dark:text-text-darkPrimary">
-          Question Practice
+          Question {currentIndex + 1} of {questions.length}
         </div>
       </div>
 
@@ -133,20 +140,18 @@ export default function QuizPage() {
       <div className="flex-1 flex justify-center py-8 px-4">
         <div className="w-full max-w-3xl flex flex-col gap-6">
           
-          {/* Question Box */}
           <div className="bg-background dark:bg-surface-dark p-8 rounded-md border border-border dark:border-border-dark shadow-sm">
             <h2 className="text-xl leading-relaxed text-text-primary dark:text-text-darkPrimary font-medium">
-              {questionData.content}
+              {currentQuestionData.content}
             </h2>
           </div>
 
-          {/* Options List */}
           <div className="flex flex-col gap-3">
             {Object.entries(options).map(([key, value]) => {
               let buttonStyle = "bg-background dark:bg-surface-dark border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary hover:border-acca";
               
               if (isAnswered) {
-                if (key === questionData.correct_option) {
+                if (key === currentQuestionData.correct_option) {
                   buttonStyle = "bg-[#F0FDF4] border-[#16A34A] text-[#166534] dark:bg-[#14532D] dark:text-[#4ADE80] dark:border-[#22C55E]";
                 } else if (key === selectedOption) {
                   buttonStyle = "bg-acca-light border-acca text-acca dark:bg-[#7F1D1D] dark:text-[#FCA5A5] dark:border-[#DC2626]";
@@ -171,24 +176,45 @@ export default function QuizPage() {
             })}
           </div>
 
-          {/* Explanation Box */}
+          {/* Explanation & Next Button Box */}
           {isAnswered && (
-            <div className={`p-6 rounded-md border-l-4 animate-in fade-in slide-in-from-bottom-2 ${
-              isCorrect 
-                ? 'bg-[#F0FDF4] border-[#16A34A] dark:bg-[#14532D]' 
-                : 'bg-acca-light border-acca dark:bg-[#7F1D1D]'
-            }`}>
-              <h3 className={`font-bold mb-2 ${isCorrect ? 'text-[#166534] dark:text-[#4ADE80]' : 'text-acca dark:text-[#FCA5A5]'}`}>
-                {isCorrect ? 'Correct!' : 'Incorrect'}
-              </h3>
-              <p className="text-text-primary dark:text-text-darkPrimary leading-relaxed">
-                {questionData.explanation}
-              </p>
+            <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2">
+              <div className={`p-6 rounded-md border-l-4 ${
+                isCorrect 
+                  ? 'bg-[#F0FDF4] border-[#16A34A] dark:bg-[#14532D]' 
+                  : 'bg-acca-light border-acca dark:bg-[#7F1D1D]'
+              }`}>
+                <h3 className={`font-bold mb-2 ${isCorrect ? 'text-[#166534] dark:text-[#4ADE80]' : 'text-acca dark:text-[#FCA5A5]'}`}>
+                  {isCorrect ? 'Correct!' : 'Incorrect'}
+                </h3>
+                <p className="text-text-primary dark:text-text-darkPrimary leading-relaxed">
+                  {currentQuestionData.explanation}
+                </p>
+              </div>
+
+              {/* NEXT BUTTON */}
+              <button 
+                onClick={handleNextQuestion}
+                className="w-full flex items-center justify-center gap-2 bg-acca hover:bg-acca-dark text-white py-4 rounded-md font-bold text-lg transition-colors shadow-sm"
+              >
+                {isLastQuestion ? (
+                  <>
+                    <CheckCircle2 className="w-6 h-6" />
+                    Complete Quiz
+                  </>
+                ) : (
+                  <>
+                    Next Question
+                    <ArrowRight className="w-6 h-6" />
+                  </>
+                )}
+              </button>
             </div>
           )}
 
           {/* Tools Box: Flag & Pin Note */}
-          <div className="flex flex-col gap-4 mt-4">
+          <div className="flex flex-col gap-4 mt-2">
+            {/* ... (Phần Flag và Note giữ nguyên như cũ) ... */}
             <div className="flex gap-4">
               <button 
                 onClick={() => setIsFlagged(!isFlagged)}
@@ -223,9 +249,6 @@ export default function QuizPage() {
                   placeholder="Type your personal note or mnemonic here..."
                   className="w-full min-h-[120px] p-4 bg-background dark:bg-surface-dark border border-border dark:border-border-dark rounded-md shadow-sm focus:outline-none focus:border-acca focus:ring-1 focus:ring-acca text-text-primary dark:text-text-darkPrimary resize-y"
                 ></textarea>
-                <p className="text-xs text-text-secondary mt-2">
-                  Notes are automatically saved to your profile.
-                </p>
               </div>
             )}
           </div>
