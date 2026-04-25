@@ -15,7 +15,7 @@ export default function QuizPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // States quản lý đáp án cho ĐA DẠNG câu hỏi
+  // States quản lý đáp án 
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   
@@ -23,25 +23,24 @@ export default function QuizPage() {
   const [selectedMultiple, setSelectedMultiple] = useState<string[]>([]);
   const [shortAnswerValue, setShortAnswerValue] = useState("");
 
+  // States quản lý Công cụ
   const [isFlagged, setIsFlagged] = useState(false);
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
 
-useEffect(() => {
+  useEffect(() => {
     const fetchQuestions = async () => {
       try {
         if (topicId === 'mistakes' || topicId === 'flagged') {
-          // --- LOGIC MỚI: Xử lý cả 2 trường hợp ôn tập ---
           const { data: { user } } = await supabase.auth.getUser();
           if (!user) return;
 
-          // Tạo câu truy vấn dựa trên người dùng bấm nút nào
           let query = supabase.from('user_progress').select('question_id').eq('user_id', user.id);
           
           if (topicId === 'mistakes') {
-            query = query.eq('is_correct', false); // Chỉ lấy câu sai
+            query = query.eq('is_correct', false);
           } else if (topicId === 'flagged') {
-            query = query.eq('is_flagged', true); // Chỉ lấy câu cắm cờ
+            query = query.eq('is_flagged', true);
           }
 
           const { data: progressData } = await query;
@@ -63,7 +62,6 @@ useEffect(() => {
           if (data) setQuestions(data);
 
         } else {
-          // --- LOGIC CŨ: Làm Quiz theo Chapter bình thường ---
           const { data, error } = await supabase
             .from('questions')
             .select('*')
@@ -100,6 +98,7 @@ useEffect(() => {
         user_id: user.id,
         question_id: currentQuestionData.id,
         is_correct: correctStatus,
+        is_flagged: isFlagged, // Giữ nguyên trạng thái cờ nếu đã bấm trước đó
         last_attempted: new Date().toISOString(),
       }, { onConflict: 'user_id,question_id' });
     } catch (error) {
@@ -107,24 +106,36 @@ useEffect(() => {
     }
   };
 
-  // Tìm hàm handleManualCheck và thay thế logic bên trong:
+  // Hàm xử lý cắm cờ và lưu ngay lập tức vào Database
+  const handleToggleFlag = async () => {
+    const newFlagState = !isFlagged;
+    setIsFlagged(newFlagState);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      await supabase.from('user_progress').upsert({
+        user_id: user.id,
+        question_id: currentQuestionData.id,
+        is_correct: isAnswered ? isCorrect : null, // Giữ nguyên kết quả làm bài (nếu có)
+        is_flagged: newFlagState,
+        last_attempted: new Date().toISOString(),
+      }, { onConflict: 'user_id,question_id' });
+    } catch (error) {
+      console.error("Lỗi cắm cờ:", error);
+    }
+  };
+
   const handleManualCheck = () => {
     let correct = false;
-    
     if (qType === 'MULTIPLE') {
       const correctArray = currentQuestionData.correct_option.split(',').map((s: string) => s.trim()).sort();
       const selectedArray = selectedMultiple.sort();
       correct = JSON.stringify(correctArray) === JSON.stringify(selectedArray);
-    } 
-    else if (qType === 'SHORT_ANSWER') {
-      // Logic mới: Tách các đáp án đúng bằng dấu ";"
-      // Ví dụ: "Asset; Assets; Tài sản"
-      const validAnswers = currentQuestionData.correct_option
-        .split(';')
-        .map((ans: string) => ans.trim().toLowerCase());
-      
+    } else if (qType === 'SHORT_ANSWER') {
+      const validAnswers = currentQuestionData.correct_option.split(';').map((ans: string) => ans.trim().toLowerCase());
       const userInput = shortAnswerValue.trim().toLowerCase();
-      
       correct = validAnswers.includes(userInput);
     }
     
@@ -133,7 +144,6 @@ useEffect(() => {
     saveProgress(correct);
   };
 
-  // NÚT CHỌN ĐÁP ÁN (Dành cho Single, True/False, Multiple)
   const handleSelectOption = (key: string) => {
     if (isAnswered) return;
 
@@ -144,35 +154,34 @@ useEffect(() => {
       setIsAnswered(true);
       saveProgress(correct);
     } else if (qType === 'MULTIPLE') {
-      setSelectedMultiple(prev => 
-        prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-      );
+      setSelectedMultiple(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
     }
   };
 
   const handleNextQuestion = () => {
     if (!isLastQuestion) {
       setCurrentIndex(prev => prev + 1);
-      // Reset toàn bộ state
+      // Reset toàn bộ state cho câu mới
       setIsAnswered(false);
+      setIsCorrect(false);
       setSelectedSingle(null);
       setSelectedMultiple([]);
       setShortAnswerValue("");
       setIsFlagged(false);
       setIsNoteOpen(false);
+      setNoteText("");
     } else {
       router.push(`/dashboard/${subjectId}`);
     }
   };
 
-  // HÀM RENDER KHU VỰC TRẢ LỜI TÙY THEO LOẠI CÂU HỎI
   const renderAnswerArea = () => {
     if (qType === 'SHORT_ANSWER') {
       return (
         <div className="flex flex-col gap-4">
           <input 
             type="text" 
-            placeholder="Type your numeric answer here..."
+            placeholder="Type your answer here..."
             value={shortAnswerValue}
             onChange={(e) => setShortAnswerValue(e.target.value)}
             disabled={isAnswered}
@@ -196,7 +205,7 @@ useEffect(() => {
         {optionsToRender.map(([key, value]) => {
           let style = "bg-background dark:bg-surface-dark border-border text-text-primary hover:border-acca";
           const isSelected = qType === 'MULTIPLE' ? selectedMultiple.includes(key) : selectedSingle === key;
-          const correctKeys = currentQuestionData.correct_option.split(',');
+          const correctKeys = currentQuestionData.correct_option.split(',').map((s: string) => s.trim());
 
           if (isAnswered) {
             if (correctKeys.includes(key)) {
@@ -247,17 +256,59 @@ useEffect(() => {
 
           {renderAnswerArea()}
 
+          {/* Tools Box: Flag & Pin Note ĐÃ ĐƯỢC MANG TRỞ LẠI */}
+          <div className="flex flex-col gap-4 mt-2 border-t border-border dark:border-border-dark pt-6">
+            <div className="flex gap-4">
+              <button 
+                onClick={handleToggleFlag}
+                className={`flex items-center gap-2 px-4 py-2 rounded transition-colors font-medium ${
+                  isFlagged 
+                    ? 'text-acca bg-acca-light dark:bg-[#7F1D1D] dark:text-[#FCA5A5]' 
+                    : 'text-text-secondary hover:bg-surface dark:hover:bg-background-dark'
+                }`}
+              >
+                <Flag className={`w-5 h-5 ${isFlagged ? 'fill-current' : ''}`} />
+                <span>{isFlagged ? 'Flagged for Review' : 'Flag Question'}</span>
+              </button>
+
+              <button 
+                onClick={() => setIsNoteOpen(!isNoteOpen)}
+                className={`flex items-center gap-2 px-4 py-2 rounded transition-colors font-medium ${
+                  isNoteOpen || noteText.length > 0
+                    ? 'text-[#EAB308] bg-[#FEF9C3] dark:bg-[#713F12] dark:text-[#FDE047]' 
+                    : 'text-text-secondary hover:bg-surface dark:hover:bg-background-dark'
+                }`}
+              >
+                <Pin className={`w-5 h-5 ${isNoteOpen || noteText.length > 0 ? 'fill-current' : ''}`} />
+                <span>Personal Note</span>
+              </button>
+            </div>
+
+            {isNoteOpen && (
+              <div className="animate-in fade-in slide-in-from-top-2">
+                <textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="Type your personal note or mnemonic here..."
+                  className="w-full min-h-[120px] p-4 bg-background dark:bg-surface-dark border border-border dark:border-border-dark rounded-md shadow-sm focus:outline-none focus:border-acca focus:ring-1 focus:ring-acca text-text-primary dark:text-text-darkPrimary resize-y"
+                ></textarea>
+              </div>
+            )}
+          </div>
+
+          {/* Explanation & Next Button */}
           {isAnswered && (
-            <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2 mt-4">
               <div className={`p-6 rounded-md border-l-4 ${isCorrect ? 'bg-[#F0FDF4] border-[#16A34A]' : 'bg-acca-light border-acca'}`}>
                 <h3 className={`font-bold mb-2 ${isCorrect ? 'text-[#166534]' : 'text-acca'}`}>{isCorrect ? 'Correct!' : 'Incorrect'}</h3>
                 <p className="leading-relaxed">{currentQuestionData.explanation}</p>
               </div>
-              <button onClick={handleNextQuestion} className="w-full flex items-center justify-center gap-2 bg-acca text-white py-4 rounded-md font-bold text-lg">
+              <button onClick={handleNextQuestion} className="w-full flex items-center justify-center gap-2 bg-acca text-white py-4 rounded-md font-bold text-lg shadow-sm">
                 {isLastQuestion ? <><CheckCircle2 className="w-6 h-6" /> Complete Quiz</> : <>Next Question <ArrowRight className="w-6 h-6" /></>}
               </button>
             </div>
           )}
+
         </div>
       </div>
     </div>
