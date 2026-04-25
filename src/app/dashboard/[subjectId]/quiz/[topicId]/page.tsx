@@ -105,15 +105,25 @@ export default function QuizPage() {
     }
   };
 
-  // NÚT CHẤM ĐIỂM THỦ CÔNG (Dành cho Multiple và Short Answer)
+  // Tìm hàm handleManualCheck và thay thế logic bên trong:
   const handleManualCheck = () => {
     let correct = false;
+    
     if (qType === 'MULTIPLE') {
-      const correctArray = currentQuestionData.correct_option.split(',').sort();
+      const correctArray = currentQuestionData.correct_option.split(',').map((s: string) => s.trim()).sort();
       const selectedArray = selectedMultiple.sort();
       correct = JSON.stringify(correctArray) === JSON.stringify(selectedArray);
-    } else if (qType === 'SHORT_ANSWER') {
-      correct = shortAnswerValue.trim().toLowerCase() === currentQuestionData.correct_option.trim().toLowerCase();
+    } 
+    else if (qType === 'SHORT_ANSWER') {
+      // Logic mới: Tách các đáp án đúng bằng dấu ";"
+      // Ví dụ: "Asset; Assets; Tài sản"
+      const validAnswers = currentQuestionData.correct_option
+        .split(';')
+        .map((ans: string) => ans.trim().toLowerCase());
+      
+      const userInput = shortAnswerValue.trim().toLowerCase();
+      
+      correct = validAnswers.includes(userInput);
     }
     
     setIsCorrect(correct);
