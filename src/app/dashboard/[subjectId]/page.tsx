@@ -150,12 +150,16 @@ export default function SubjectDetailPage() {
                     <p className="text-text-secondary text-sm">No chapters found. Please add data in Supabase.</p>
                   ) : (
                     chapters.map((chapter) => (
-                      <div key={chapter.id} className="flex items-center justify-between p-4 bg-surface dark:bg-background-dark rounded border border-border dark:border-border-dark hover:border-acca transition-colors cursor-pointer">
+                      <div 
+                        key={chapter.id} 
+                        onClick={() => router.push(`/dashboard/${subjectId}/notes/${chapter.id}`)}
+                        className="flex items-center justify-between p-4 bg-surface dark:bg-background-dark rounded border border-border dark:border-border-dark hover:border-acca transition-colors cursor-pointer group"
+                      >
                         <div>
-                          <h4 className="font-medium text-text-primary dark:text-text-darkPrimary">{chapter.title}</h4>
+                          <h4 className="font-medium text-text-primary dark:text-text-darkPrimary group-hover:text-acca transition-colors">{chapter.title}</h4>
                           <p className="text-xs text-text-secondary mt-1">Review theory and summaries</p>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-text-secondary" />
+                        <ChevronRight className="w-5 h-5 text-text-secondary group-hover:text-acca transition-colors" />
                       </div>
                     ))
                   )}
@@ -175,7 +179,6 @@ export default function SubjectDetailPage() {
                           <h4 className="font-medium text-text-primary dark:text-text-darkPrimary">{chapter.title}</h4>
                           <p className="text-xs text-text-secondary mt-1">Test your knowledge on this chapter</p>
                         </div>
-                        {/* Truyền chính xác ID của chương học vào URL thay vì 'chapter-1' */}
                         <button 
                           onClick={() => router.push(`/dashboard/${subjectId}/quiz/${chapter.id}`)}
                           className="flex items-center gap-2 bg-acca hover:bg-acca-dark text-white px-4 py-2 rounded transition-colors text-sm font-medium"
@@ -200,7 +203,7 @@ export default function SubjectDetailPage() {
             </div>
           </div>
 
-          {/* Right Column - Widgets (Giữ nguyên như cũ) */}
+          {/* Right Column - Widgets */}
           <div className="space-y-6">
             
             {/* Formula Book Widget */}
