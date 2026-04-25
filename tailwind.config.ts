@@ -44,6 +44,9 @@ const config: Config = {
       }
     },
   },
-  plugins: [],
+  // Tìm phần plugins ở cuối file và sửa thành như sau:
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 };
 export default config;
