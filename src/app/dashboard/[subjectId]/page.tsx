@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2, ChevronRight, Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
+const [resourcesList, setResourcesList] = useState<any[]>([]);
+
 const SUBJECT_NAMES: Record<string, string> = {
   F1: 'Business and Technology',
   F2: 'Management Accounting',
@@ -54,6 +56,15 @@ export default function SubjectDetailPage() {
 
         const { data: chaptersData } = await supabase.from('chapters').select('*').eq('subject_id', subjectId).order('order_index', { ascending: true });
         if (chaptersData) setChapters(chaptersData);
+
+        // --- LẤY DANH SÁCH TÀI LIỆU ---
+        const { data: resourcesData } = await supabase
+          .from('resources')
+          .select('*')
+          .eq('subject_id', subjectId)
+          .order('created_at', { ascending: false });
+        
+        if (resourcesData) setResourcesList(resourcesData);
 
         const { data: questions } = await supabase.from('questions').select('id').eq('subject_id', subjectId);
         const totalQuestions = questions?.length || 0;
@@ -223,11 +234,54 @@ export default function SubjectDetailPage() {
                 </div>
               )}
               
+              {/* RESOURCES TAB ĐÃ ĐƯỢC NÂNG CẤP */}
               {activeTab === 'resources' && (
-                <div className="flex flex-col items-center justify-center h-full py-12">
-                  <FileText className="w-12 h-12 text-text-secondary mb-4 opacity-50" />
-                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-2">Additional Resources</h3>
-                  <p className="text-sm text-text-secondary">Past papers, mock exams, and PDFs will be available here.</p>
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                  <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Study Resources</h3>
+                  
+                  {resourcesList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full py-12">
+                      <FileText className="w-12 h-12 text-text-secondary mb-4 opacity-50" />
+                      <p className="text-sm text-text-secondary">No resources found. Please add materials in Supabase.</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {resourcesList.map((res) => (
+                        <div key={res.id} className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-surface dark:bg-background-dark rounded-md border border-border dark:border-border-dark hover:border-acca transition-colors group shadow-sm">
+                          
+                          <div className="flex items-start gap-4">
+                            {/* Icon tự động đổi màu theo loại tài liệu */}
+                            <div className="p-3 bg-background dark:bg-surface-dark rounded border border-border dark:border-border-dark shrink-0">
+                              {res.resource_type === 'VIDEO' ? (
+                                <PlayCircle className="w-6 h-6 text-[#3B82F6]" /> // Màu xanh cho Video
+                              ) : (
+                                <FileText className="w-6 h-6 text-acca" /> // Màu đỏ ACCA cho PDF
+                              )}
+                            </div>
+                            
+                            <div>
+                              <h4 className="font-bold text-text-primary dark:text-text-darkPrimary group-hover:text-acca transition-colors">
+                                {res.title}
+                              </h4>
+                              <p className="text-sm text-text-secondary mt-1 leading-relaxed">
+                                {res.description}
+                              </p>
+                            </div>
+                          </div>
+
+                          <a 
+                            href={res.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="mt-4 md:mt-0 shrink-0 px-6 py-2 border-2 border-border dark:border-border-dark rounded font-medium text-text-primary dark:text-text-darkPrimary hover:border-acca hover:text-acca transition-colors text-center"
+                          >
+                            {res.resource_type === 'VIDEO' ? 'Watch Video' : 'View / Download'}
+                          </a>
+
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
