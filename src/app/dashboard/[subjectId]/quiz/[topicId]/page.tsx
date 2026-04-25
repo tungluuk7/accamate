@@ -4,6 +4,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Flag, Pin, Loader2, ArrowRight, CheckCircle2, CheckSquare, Save } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+// Thêm bộ công cụ Markdown & Toán học
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 export default function QuizPage() {
   const router = useRouter();
@@ -195,7 +201,11 @@ export default function QuizPage() {
         <div className="w-full max-w-3xl flex flex-col gap-6">
           <div className="bg-background dark:bg-surface-dark p-8 rounded-md border border-border dark:border-border-dark shadow-sm">
             <div className="text-xs font-bold text-acca mb-3 uppercase tracking-wider">{qType.replace('_', ' ')}</div>
-            <h2 className="text-xl leading-relaxed font-medium text-text-primary dark:text-text-darkPrimary">{currentQuestionData.content}</h2>
+            <div className="prose dark:prose-invert max-w-none text-xl leading-relaxed font-medium text-text-primary dark:text-text-darkPrimary">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {currentQuestionData.content}
+              </ReactMarkdown>
+            </div>
           </div>
 
           {/* Answer Area - Giữ nguyên logic render của bạn */}
@@ -219,7 +229,15 @@ export default function QuizPage() {
                 return (
                   <button key={key} onClick={() => handleSelectOption(key)} disabled={isAnswered} className={`w-full flex items-center p-4 rounded-md border-2 transition-all text-left ${style}`}>
                     <span className={`w-8 h-8 flex items-center justify-center rounded mr-4 shrink-0 font-bold ${qType === 'MULTIPLE' ? 'rounded-md border-2' : 'rounded-full border border-current'}`}>{qType === 'MULTIPLE' && isSelected ? <CheckSquare className="w-5 h-5 text-acca" /> : key}</span>
-                    <span className="text-lg">{value}</span>
+                    <span className="text-lg flex-1">
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm, remarkMath]} 
+                        rehypePlugins={[rehypeKatex]}
+                        components={{ p: ({node, ...props}) => <span {...props} /> }} 
+                      >
+                        {value}
+                      </ReactMarkdown>
+                    </span>
                   </button>
                 );
               })}
@@ -257,7 +275,11 @@ export default function QuizPage() {
           {/* Explanation & Next Button */}
           {isAnswered && (
             <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-2 mt-4 pb-12">
-              <div className={`p-6 rounded-md border-l-4 ${isCorrect ? 'bg-[#F0FDF4] border-[#16A34A] dark:bg-[#14532D]' : 'bg-acca-light border-acca dark:bg-[#7F1D1D]'}`}><h3 className={`font-bold mb-2 ${isCorrect ? 'text-[#166534] dark:text-[#4ADE80]' : 'text-acca dark:text-[#FCA5A5]'}`}>{isCorrect ? 'Correct!' : 'Incorrect'}</h3><p className="leading-relaxed text-text-primary dark:text-text-darkPrimary">{currentQuestionData.explanation}</p></div>
+              <div className={`p-6 rounded-md border-l-4 ${isCorrect ? 'bg-[#F0FDF4] border-[#16A34A] dark:bg-[#14532D]' : 'bg-acca-light border-acca dark:bg-[#7F1D1D]'}`}><h3 className={`font-bold mb-2 ${isCorrect ? 'text-[#166534] dark:text-[#4ADE80]' : 'text-acca dark:text-[#FCA5A5]'}`}>{isCorrect ? 'Correct!' : 'Incorrect'}</h3><div className="prose dark:prose-invert max-w-none leading-relaxed text-text-primary dark:text-text-darkPrimary">
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    {currentQuestionData.explanation}
+                  </ReactMarkdown>
+                </div></div>
               <button onClick={handleNextQuestion} className="w-full flex items-center justify-center gap-2 bg-acca text-white py-4 rounded-md font-bold text-lg shadow-sm">{currentIndex === questions.length - 1 ? <><CheckCircle2 className="w-6 h-6" /> Complete Quiz</> : <>Next Question <ArrowRight className="w-6 h-6" /></>}</button>
             </div>
           )}
