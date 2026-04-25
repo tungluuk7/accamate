@@ -5,8 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { BookOpen, Calculator, Clock, AlertCircle, FileText, Settings, PlayCircle, Loader2, ChevronRight, Calendar } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
-const [resourcesList, setResourcesList] = useState<any[]>([]);
-
 const SUBJECT_NAMES: Record<string, string> = {
   F1: 'Business and Technology',
   F2: 'Management Accounting',
@@ -25,10 +23,12 @@ export default function SubjectDetailPage() {
   const subjectId = params.subjectId as string;
   const subjectName = SUBJECT_NAMES[subjectId] || 'Unknown Subject';
 
+  // --- TẤT CẢ CÁC STATE PHẢI NẰM TRONG NÀY ---
   const [activeTab, setActiveTab] = useState('notebook');
   const [progress, setProgress] = useState(0);
   const [mistakesCount, setMistakesCount] = useState(0);
   const [chapters, setChapters] = useState<any[]>([]);
+  const [resourcesList, setResourcesList] = useState<any[]>([]); // Đã chuyển vào đúng vị trí
   const [isLoading, setIsLoading] = useState(true);
   
   // States và Ref cho tính năng Đếm ngược ngày thi
@@ -42,7 +42,6 @@ export default function SubjectDetailPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // --- SỬA LỖI 406 TẠI ĐÂY (Dùng maybeSingle thay vì single) ---
         const { data: settingsData } = await supabase
           .from('user_settings')
           .select('exam_date')
@@ -57,7 +56,7 @@ export default function SubjectDetailPage() {
         const { data: chaptersData } = await supabase.from('chapters').select('*').eq('subject_id', subjectId).order('order_index', { ascending: true });
         if (chaptersData) setChapters(chaptersData);
 
-        // --- LẤY DANH SÁCH TÀI LIỆU ---
+        // LẤY DANH SÁCH TÀI LIỆU
         const { data: resourcesData } = await supabase
           .from('resources')
           .select('*')
@@ -118,13 +117,12 @@ export default function SubjectDetailPage() {
     }
   };
 
-  // Hàm mở bộ chọn lịch một cách chuẩn xác
   const openDatePicker = () => {
     if (dateInputRef.current) {
       try {
-        dateInputRef.current.showPicker(); // API mới cho phép mở lịch trực tiếp
+        dateInputRef.current.showPicker(); 
       } catch (e) {
-        dateInputRef.current.click(); // Fallback cho trình duyệt cũ
+        dateInputRef.current.click(); 
       }
     }
   };
@@ -148,7 +146,6 @@ export default function SubjectDetailPage() {
             </p>
           </div>
           
-          {/* KHU VỰC ĐẾM NGƯỢC CÓ TÍCH HỢP CHỌN NGÀY (ĐÃ SỬA LỖI) */}
           <div className="relative group">
             <div 
               onClick={openDatePicker}
@@ -172,7 +169,6 @@ export default function SubjectDetailPage() {
               )}
             </div>
             
-            {/* Input date được giấu kín đi nhưng vẫn lưu giá trị */}
             <input 
               ref={dateInputRef}
               type="date" 
@@ -234,7 +230,6 @@ export default function SubjectDetailPage() {
                 </div>
               )}
               
-              {/* RESOURCES TAB ĐÃ ĐƯỢC NÂNG CẤP */}
               {activeTab === 'resources' && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
                   <h3 className="font-bold text-text-primary dark:text-text-darkPrimary mb-4">Study Resources</h3>
@@ -250,12 +245,11 @@ export default function SubjectDetailPage() {
                         <div key={res.id} className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-surface dark:bg-background-dark rounded-md border border-border dark:border-border-dark hover:border-acca transition-colors group shadow-sm">
                           
                           <div className="flex items-start gap-4">
-                            {/* Icon tự động đổi màu theo loại tài liệu */}
                             <div className="p-3 bg-background dark:bg-surface-dark rounded border border-border dark:border-border-dark shrink-0">
                               {res.resource_type === 'VIDEO' ? (
-                                <PlayCircle className="w-6 h-6 text-[#3B82F6]" /> // Màu xanh cho Video
+                                <PlayCircle className="w-6 h-6 text-[#3B82F6]" /> 
                               ) : (
-                                <FileText className="w-6 h-6 text-acca" /> // Màu đỏ ACCA cho PDF
+                                <FileText className="w-6 h-6 text-acca" /> 
                               )}
                             </div>
                             
@@ -297,11 +291,11 @@ export default function SubjectDetailPage() {
                 <h3 className="font-bold text-text-primary dark:text-text-darkPrimary">Formula Book</h3>
               </div>
               <button 
-  onClick={() => router.push(`/dashboard/${subjectId}/formulas`)} // THÊM DÒNG NÀY
-  className="w-full py-2 border border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca transition-colors text-sm font-medium"
->
-  View All Formulas
-</button>
+                onClick={() => router.push(`/dashboard/${subjectId}/formulas`)}
+                className="w-full py-2 border border-border dark:border-border-dark rounded text-text-primary dark:text-text-darkPrimary hover:border-acca transition-colors text-sm font-medium"
+              >
+                View All Formulas
+              </button>
             </div>
 
             <div className="bg-background dark:bg-surface-dark p-6 rounded-md border border-border dark:border-border-dark shadow-sm">
