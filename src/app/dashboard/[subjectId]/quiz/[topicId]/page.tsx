@@ -30,21 +30,55 @@ export default function QuizPage() {
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
-        const { data, error } = await supabase
-          .from('questions')
-          .select('*')
-          .eq('subject_id', subjectId)
-          .eq('chapter_id', topicId)
-          .order('id'); 
+        // 1. TRƯỜNG HỢP: ÔN TẬP CÂU SAI
+        if (topicId === 'mistakes') {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
 
-        if (error) throw error;
-        if (data) setQuestions(data);
+          // Lấy ID các câu mà Trang đã làm sai (is_correct = false) hoặc đã cắm cờ (is_flagged = true)
+          const { data: progressData } = await supabase
+            .from('user_progress')
+            .select('question_id')
+            .eq('user_id', user.id)
+            .or('is_correct.eq.false,is_flagged.eq.true');
+
+          const mistakeIds = progressData?.map(p => p.question_id) || [];
+
+          if (mistakeIds.length === 0) {
+            setQuestions([]);
+            return;
+          }
+
+          // Kéo nội dung các câu hỏi đó về
+          const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('subject_id', subjectId)
+            .in('id', mistakeIds) // Lọc những câu nằm trong danh sách làm sai
+            .order('id'); 
+
+          if (error) throw error;
+          if (data) setQuestions(data);
+
+        } else {
+          // 2. TRƯỜNG HỢP BÌNH THƯỜNG: LÀM QUIZ THEO CHƯƠNG
+          const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('subject_id', subjectId)
+            .eq('chapter_id', topicId)
+            .order('id'); 
+
+          if (error) throw error;
+          if (data) setQuestions(data);
+        }
       } catch (error) {
         console.error("Lỗi tải câu hỏi:", error);
       } finally {
         setIsLoading(false);
       }
     };
+    
     fetchQuestions();
   }, [subjectId, topicId]);
 

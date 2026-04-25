@@ -256,6 +256,7 @@ export default function SubjectDetailPage() {
               </div>
 
               <button 
+                onClick={() => router.push(`/dashboard/${subjectId}/quiz/mistakes`)}
                 disabled={mistakesCount === 0}
                 className={`w-full py-2.5 rounded font-medium transition-colors ${mistakesCount > 0 ? 'bg-acca hover:bg-acca-dark text-white' : 'bg-surface dark:bg-background-dark text-text-secondary cursor-not-allowed'}`}
               >
