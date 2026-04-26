@@ -50,7 +50,7 @@ export default function QuizPage() {
           .select('*')
           .eq('subject_id', subjectId)
           .eq('chapter_id', topicId)
-          .order('id');
+          .order('order_index', { ascending: true });
 
         if (error) throw error;
         if (!allQuestions) return;
