@@ -38,36 +38,66 @@ export default function QuizPage() {
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const mode = searchParams?.get('mode');
 
+  // --- ĐÃ CẬP NHẬT: LOGIC TẢI CÂU HỎI THÔNG MINH ---
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // 1. Lấy TẤT CẢ câu hỏi của chương này
-        let { data: allQuestions, error } = await supabase
-          .from('questions')
-          .select('*')
-          .eq('subject_id', subjectId)
-          .eq('chapter_id', topicId)
-          .order('order_index', { ascending: true });
+        let allQuestions: any[] = [];
 
-        if (error) throw error;
-        if (!allQuestions) return;
-
-        // 2. Nếu ở chế độ "Continue", thực hiện lọc bỏ những câu đã làm ĐÚNG
-        if (mode === 'continue') {
+        // --- NHÁNH 1: CHẾ ĐỘ ÔN TẬP (MISTAKES & FLAGGED) ---
+        if (topicId === 'mistakes' || topicId === 'flagged') {
+          // Bước 1: Tìm ID các câu làm sai hoặc đã cắm cờ
           const { data: progress } = await supabase
             .from('user_progress')
-            .select('question_id, is_correct')
-            .eq('user_id', user.id);
+            .select('question_id')
+            .eq('user_id', user.id)
+            .eq(topicId === 'mistakes' ? 'is_correct' : 'is_flagged', topicId === 'mistakes' ? false : true);
 
-          const correctIds = progress
-            ?.filter(p => p.is_correct === true)
-            .map(p => p.question_id) || [];
+          if (!progress || progress.length === 0) {
+             setQuestions([]);
+             setIsLoading(false);
+             return;
+          }
 
-          // Chỉ giữ lại những câu CHƯA LÀM hoặc làm SAI
-          allQuestions = allQuestions.filter(q => !correctIds.includes(q.id));
+          const targetIds = progress.map(p => p.question_id);
+
+          // Bước 2: Tải nội dung các câu hỏi đó lên, sắp xếp theo order_index
+          const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('subject_id', subjectId)
+            .in('id', targetIds)
+            .order('order_index', { ascending: true });
+
+          if (error) throw error;
+          allQuestions = data || [];
+
+        } 
+        // --- NHÁNH 2: CHẾ ĐỘ LÀM QUIZ THEO CHAPTER BÌNH THƯỜNG ---
+        else {
+          let { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('subject_id', subjectId)
+            .eq('chapter_id', topicId)
+            .order('order_index', { ascending: true });
+
+          if (error) throw error;
+          allQuestions = data || [];
+
+          // Lọc bỏ câu ĐÚNG nếu bấm nút "Continue"
+          if (mode === 'continue') {
+            const { data: progress } = await supabase
+              .from('user_progress')
+              .select('question_id, is_correct')
+              .eq('user_id', user.id);
+
+            const correctIds = progress?.filter(p => p.is_correct === true).map(p => p.question_id) || [];
+            allQuestions = allQuestions.filter(q => !correctIds.includes(q.id));
+          }
         }
 
         setQuestions(allQuestions);
@@ -208,8 +238,7 @@ export default function QuizPage() {
             </div>
           </div>
 
-          {/* Answer Area - Giữ nguyên logic render của bạn */}
-          {/* ... (Phần renderAnswerArea đã được tối ưu tích hợp bên trên) ... */}
+          {/* Answer Area */}
           {qType === 'SHORT_ANSWER' ? (
             <div className="flex flex-col gap-4">
               <input type="text" placeholder="Type your answer here..." value={shortAnswerValue} onChange={(e) => setShortAnswerValue(e.target.value)} disabled={isAnswered} className={`w-full p-6 border-2 rounded-md bg-background dark:bg-surface-dark text-text-primary dark:text-text-darkPrimary text-xl focus:outline-none transition-colors ${isAnswered ? (isCorrect ? 'border-[#16A34A] bg-[#F0FDF4] dark:bg-[#14532D]' : 'border-acca bg-acca-light dark:bg-[#7F1D1D]') : 'border-border dark:border-border-dark focus:border-acca'}`} />
