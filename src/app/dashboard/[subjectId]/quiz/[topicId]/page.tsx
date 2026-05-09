@@ -246,8 +246,7 @@ export default function QuizPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {[['A', currentQuestionData.option_a || 'True'], ['B', currentQuestionData.option_b || 'False'], ['C', currentQuestionData.option_c], ['D', currentQuestionData.option_d]].filter(opt => opt[1] && opt[1] !== "").map(([key, value]) => {
-                let style = "bg-background dark:bg-surface-dark border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary hover:border-acca";
+{[['A', currentQuestionData.option_a || 'True'], ['B', currentQuestionData.option_b || 'False'], ['C', currentQuestionData.option_c], ['D', currentQuestionData.option_d], ['E', currentQuestionData.option_e], ['F', currentQuestionData.option_f]].filter(opt => opt[1] && opt[1] !== "").map(([key, value]) => {                let style = "bg-background dark:bg-surface-dark border-border dark:border-border-dark text-text-primary dark:text-text-darkPrimary hover:border-acca";
                 const isSelected = qType === 'MULTIPLE' ? selectedMultiple.includes(key) : selectedSingle === key;
                 if (isAnswered) {
                   const correctKeys = currentQuestionData.correct_option.split(',').map((s: string) => s.trim());
